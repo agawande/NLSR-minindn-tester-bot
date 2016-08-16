@@ -1,0 +1,399 @@
+From eb3ccacc854c7f639c78aff89f018723ed00e226 Mon Sep 17 00:00:00 2001
+From: Vince Lehman <vslehman@memphis.edu>
+Date: Wed, 01 Apr 2015 15:59:39 -0500
+Subject: [PATCH] src: Sort NextHops on NexthopList insertion
+
+refs: #2721
+
+Change-Id: I39893c5fb6b5fac93220901ab3190090f0d2cc57
+---
+
+diff --git a/src/route/fib.cpp b/src/route/fib.cpp
+index efc8a45..786c156 100644
+--- a/src/route/fib.cpp
++++ b/src/route/fib.cpp
+@@ -72,7 +72,7 @@
+                                                   m_table.end(),
+                                                   bind(&fibEntryNameCompare, _1, name));
+   if (it != m_table.end()) {
+-    for (std::list<NextHop>::iterator nhit =
++    for (std::set<NextHop, NextHopComparator>::iterator nhit =
+            (*it).getNexthopList().getNextHops().begin();
+          nhit != (*it).getNexthopList().getNextHops().end(); nhit++) {
+       //remove entry from NDN-FIB
+@@ -110,8 +110,6 @@
+                      ndn::nfd::ROUTE_FLAG_CAPTURE, 0);
+     }
+   }
+-
+-  entry.getNexthopList().sort();
+ }
+ 
+ void
+@@ -155,9 +153,6 @@
+ Fib::update(const ndn::Name& name, NexthopList& allHops)
+ {
+   _LOG_DEBUG("Fib::update called");
+-
+-  // Sort all of the next hops so lower cost hops are prioritized
+-  allHops.sort();
+ 
+   // Get the max possible faces which is the minumum of the configuration setting and
+   // the length of the list of all next hops.
+@@ -239,7 +234,7 @@
+        ++it) {
+     _LOG_DEBUG("Cancelling Scheduled event. Name: " << it->getName());
+     cancelScheduledExpiringEvent((*it).getExpiringEventId());
+-    for (std::list<NextHop>::iterator nhit =
++    for (std::set<NextHop, NextHopComparator>::iterator nhit =
+          (*it).getNexthopList().getNextHops().begin();
+          nhit != (*it).getNexthopList().getNextHops().end(); nhit++) {
+       //Remove entry from NDN-FIB
+@@ -279,7 +274,7 @@
+ Fib::removeHop(NexthopList& nl, const std::string& doNotRemoveHopFaceUri,
+                const ndn::Name& name)
+ {
+-  for (std::list<NextHop>::iterator it = nl.getNextHops().begin();
++  for (std::set<NextHop, NextHopComparator>::iterator it = nl.getNextHops().begin();
+        it != nl.getNextHops().end();   ++it) {
+     if (it->getConnectingFaceUri() != doNotRemoveHopFaceUri) {
+       //Remove FIB Entry from NDN-FIB
+diff --git a/src/route/name-prefix-table-entry.cpp b/src/route/name-prefix-table-entry.cpp
+index 1236777..0e01283 100644
+--- a/src/route/name-prefix-table-entry.cpp
++++ b/src/route/name-prefix-table-entry.cpp
+@@ -36,7 +36,7 @@
+   for (std::list<RoutingTableEntry>::iterator it = m_rteList.begin();
+        it != m_rteList.end(); ++it)
+   {
+-    for (std::list<NextHop>::iterator nhit =
++    for (std::set<NextHop, NextHopComparator>::iterator nhit =
+            (*it).getNexthopList().getNextHops().begin();
+          nhit != (*it).getNexthopList().getNextHops().end(); ++nhit)
+     {
+@@ -78,7 +78,7 @@
+   else
+   {
+     (*it).getNexthopList().reset(); // reseting existing routing table's next hop
+-    for (std::list<NextHop>::iterator nhit =
++    for (std::set<NextHop, NextHopComparator>::iterator nhit =
+            rte.getNexthopList().getNextHops().begin();
+          nhit != rte.getNexthopList().getNextHops().end(); ++nhit) {
+       (*it).getNexthopList().addNextHop((*nhit));
+diff --git a/src/route/name-prefix-table.cpp b/src/route/name-prefix-table.cpp
+index 0add13e..1ace03e 100644
+--- a/src/route/name-prefix-table.cpp
++++ b/src/route/name-prefix-table.cpp
+@@ -53,7 +53,6 @@
+     entry.addRoutingTableEntry(rte);
+ 
+     entry.generateNhlfromRteList();
+-    entry.getNexthopList().sort();
+ 
+     m_table.push_back(entry);
+ 
+@@ -68,7 +67,6 @@
+     it->addRoutingTableEntry(rte);
+ 
+     it->generateNhlfromRteList();
+-    it->getNexthopList().sort();
+ 
+     if (it->getNexthopList().getSize() > 0) {
+       _LOG_TRACE("Updating FIB with next hops for " << *it);
+@@ -117,7 +115,6 @@
+     else {
+       _LOG_TRACE(*it << " has other routing table entries; updating FIB with next hops");
+       it->generateNhlfromRteList();
+-      it->getNexthopList().sort();
+ 
+       m_nlsr.getFib().update(name, it->getNexthopList());
+     }
+diff --git a/src/route/nexthop-list.cpp b/src/route/nexthop-list.cpp
+index a720666..93d6029 100644
+--- a/src/route/nexthop-list.cpp
++++ b/src/route/nexthop-list.cpp
+@@ -19,8 +19,6 @@
+  * NLSR, e.g., in COPYING.md file.  If not, see <http://www.gnu.org/licenses/>.
+  **/
+ 
+-#include <iostream>
+-
+ #include "common.hpp"
+ #include "nexthop-list.hpp"
+ #include "nexthop.hpp"
+@@ -33,64 +31,47 @@
+ using namespace std;
+ 
+ static bool
+-nexthopCompare(NextHop& nh1, NextHop& nh2)
++nexthopCompare(const NextHop& nh1, const NextHop& nh2)
+ {
+   return nh1.getConnectingFaceUri() == nh2.getConnectingFaceUri();
+ }
+ 
+ static bool
+-nexthopRemoveCompare(NextHop& nh1, NextHop& nh2)
++nexthopRemoveCompare(const NextHop& nh1, const NextHop& nh2)
+ {
+   return (nh1.getConnectingFaceUri() == nh2.getConnectingFaceUri() &&
+           nh1.getRouteCostAsAdjustedInteger() == nh2.getRouteCostAsAdjustedInteger()) ;
+ }
+ 
+-static bool
+-nextHopSortingComparator(const NextHop& nh1, const NextHop& nh2)
+-{
+-  if (nh1.getRouteCostAsAdjustedInteger() < nh2.getRouteCostAsAdjustedInteger()) {
+-    return true;
+-  }
+-  else if (nh1.getRouteCostAsAdjustedInteger() == nh2.getRouteCostAsAdjustedInteger()) {
+-    return nh1.getConnectingFaceUri() < nh2.getConnectingFaceUri();
+-  }
+-  else {
+-    return false;
+-  }
+-}
+-
+ /**
+ Add next hop to the Next Hop list
+ If next hop is new it is added
+-If next hop already exists in next
+-hop list then updates the route
+-cost with new next hop's route cost
++If next hop already exists in next hop list then keep the next hop with lower cost
+ */
+ 
+ void
+-NexthopList::addNextHop(NextHop& nh)
++NexthopList::addNextHop(const NextHop& nh)
+ {
+-  std::list<NextHop>::iterator it = std::find_if(m_nexthopList.begin(),
++  std::set<NextHop, NextHopComparator>::iterator it = std::find_if(m_nexthopList.begin(),
+                                                  m_nexthopList.end(),
+                                                  ndn::bind(&nexthopCompare, _1, nh));
+   if (it == m_nexthopList.end()) {
+-    m_nexthopList.push_back(nh);
+-    return;
++    m_nexthopList.insert(nh);
+   }
+-  if ((*it).getRouteCost() > nh.getRouteCost()) {
+-    (*it).setRouteCost(nh.getRouteCost());
++  else if (it->getRouteCost() > nh.getRouteCost()) {
++    removeNextHop(*it);
++    m_nexthopList.insert(nh);
+   }
+ }
+ 
+ /**
+ Remove a next hop only if both next hop face and route cost are same
+-
+ */
+ 
+ void
+-NexthopList::removeNextHop(NextHop& nh)
++NexthopList::removeNextHop(const NextHop& nh)
+ {
+-  std::list<NextHop>::iterator it = std::find_if(m_nexthopList.begin(),
++  std::set<NextHop, NextHopComparator>::iterator it = std::find_if(m_nexthopList.begin(),
+                                                  m_nexthopList.end(),
+                                                  ndn::bind(&nexthopRemoveCompare, _1, nh));
+   if (it != m_nexthopList.end()) {
+@@ -99,17 +80,11 @@
+ }
+ 
+ void
+-NexthopList::sort()
+-{
+-  m_nexthopList.sort(nextHopSortingComparator);
+-}
+-
+-void
+ NexthopList::writeLog()
+ {
+   int i = 1;
+-  sort();
+-  for (std::list<NextHop>::iterator it = m_nexthopList.begin();
++
++  for (std::set<NextHop, NextHopComparator>::iterator it = m_nexthopList.begin();
+        it != m_nexthopList.end() ; it++, i++) {
+     _LOG_DEBUG("Nexthop " << i << ": " << (*it).getConnectingFaceUri()
+                << " Route Cost: " << (*it).getRouteCost());
+diff --git a/src/route/nexthop-list.hpp b/src/route/nexthop-list.hpp
+index faf13f0..66af70f 100644
+--- a/src/route/nexthop-list.hpp
++++ b/src/route/nexthop-list.hpp
+@@ -23,7 +23,7 @@
+ #ifndef NLSR_NEXTHOP_LIST_HPP
+ #define NLSR_NEXTHOP_LIST_HPP
+ 
+-#include <list>
++#include <set>
+ #include <iostream>
+ #include <boost/cstdint.hpp>
+ 
+@@ -33,6 +33,20 @@
+ #include "adjacent.hpp"
+ 
+ namespace nlsr {
++
++struct NextHopComparator {
++  bool operator() (const NextHop& nh1, const NextHop& nh2) const {
++    if (nh1.getRouteCostAsAdjustedInteger() < nh2.getRouteCostAsAdjustedInteger()) {
++      return true;
++    }
++    else if (nh1.getRouteCostAsAdjustedInteger() == nh2.getRouteCostAsAdjustedInteger()) {
++      return nh1.getConnectingFaceUri() < nh2.getConnectingFaceUri();
++    }
++    else {
++      return false;
++    }
++  }
++};
+ 
+ class NexthopList
+ {
+@@ -46,13 +60,10 @@
+   }
+ 
+   void
+-  addNextHop(NextHop& nh);
++  addNextHop(const NextHop& nh);
+ 
+   void
+-  removeNextHop(NextHop& nh);
+-
+-  void
+-  sort();
++  removeNextHop(const NextHop& nh);
+ 
+   size_t
+   getSize()
+@@ -66,14 +77,14 @@
+     m_nexthopList.clear();
+   }
+ 
+-  std::list<NextHop>&
++  std::set<NextHop, NextHopComparator>&
+   getNextHops()
+   {
+     return m_nexthopList;
+   }
+ 
+-  typedef std::list<NextHop>::iterator iterator;
+-  typedef std::list<NextHop>::const_iterator const_iterator;
++  typedef std::set<NextHop, NextHopComparator>::iterator iterator;
++  typedef std::set<NextHop, NextHopComparator>::const_iterator const_iterator;
+ 
+   iterator
+   begin()
+@@ -103,7 +114,7 @@
+   writeLog();
+ 
+ private:
+-  std::list<NextHop> m_nexthopList;
++  std::set<NextHop, NextHopComparator> m_nexthopList;
+ };
+ 
+ }//namespace nlsr
+diff --git a/src/route/nexthop.hpp b/src/route/nexthop.hpp
+index 0e409d2..7be7baa 100644
+--- a/src/route/nexthop.hpp
++++ b/src/route/nexthop.hpp
+@@ -80,7 +80,7 @@
+   }
+ 
+   void
+-  setRouteCost(double rc)
++  setRouteCost(const double rc)
+   {
+     m_routeCost = rc;
+   }
+diff --git a/tests/test-hyperbolic-calculator.cpp b/tests/test-hyperbolic-calculator.cpp
+index 056056f..33e7c1e 100644
+--- a/tests/test-hyperbolic-calculator.cpp
++++ b/tests/test-hyperbolic-calculator.cpp
+@@ -152,7 +152,7 @@
+   NexthopList& bHopList = entryB->getNexthopList();
+   BOOST_REQUIRE_EQUAL(bHopList.getNextHops().size(), 2);
+ 
+-  for (std::list<NextHop>::iterator it = bHopList.begin(); it != bHopList.end(); ++it) {
++  for (std::set<NextHop, NextHopComparator>::iterator it = bHopList.begin(); it != bHopList.end(); ++it) {
+     std::string faceUri = it->getConnectingFaceUri();
+     uint64_t cost = it->getRouteCostAsAdjustedInteger();
+ 
+@@ -166,7 +166,7 @@
+   NexthopList& cHopList = entryC->getNexthopList();
+   BOOST_REQUIRE_EQUAL(cHopList.getNextHops().size(), 2);
+ 
+-  for (std::list<NextHop>::iterator it = cHopList.begin(); it != cHopList.end(); ++it) {
++  for (std::set<NextHop, NextHopComparator>::iterator it = cHopList.begin(); it != cHopList.end(); ++it) {
+     std::string faceUri = it->getConnectingFaceUri();
+     uint64_t cost = it->getRouteCostAsAdjustedInteger();
+ 
+diff --git a/tests/test-link-state-calculator.cpp b/tests/test-link-state-calculator.cpp
+index c033043..0b96480 100644
+--- a/tests/test-link-state-calculator.cpp
++++ b/tests/test-link-state-calculator.cpp
+@@ -244,7 +244,7 @@
+   NexthopList& bHopList = entryB->getNexthopList();
+   BOOST_REQUIRE_EQUAL(bHopList.getNextHops().size(), 1);
+ 
+-  NextHop& nextHopForB = bHopList.getNextHops().front();
++  const NextHop& nextHopForB = *(bHopList.getNextHops().begin());
+ 
+   BOOST_CHECK(nextHopForB.getConnectingFaceUri() == ROUTER_B_FACE &&
+               nextHopForB.getRouteCostAsAdjustedInteger() == LINK_AB_COST);
+@@ -256,7 +256,7 @@
+   NexthopList& cHopList = entryC->getNexthopList();
+   BOOST_REQUIRE_EQUAL(cHopList.getNextHops().size(), 1);
+ 
+-  NextHop& nextHopForC = cHopList.getNextHops().front();
++  const NextHop& nextHopForC = *(cHopList.getNextHops().begin());
+ 
+   BOOST_CHECK(nextHopForC.getConnectingFaceUri() == ROUTER_C_FACE &&
+               nextHopForC.getRouteCostAsAdjustedInteger() == LINK_AC_COST);
+diff --git a/tests/test-nexthop-list.cpp b/tests/test-nexthop-list.cpp
+index 0389a9d..6e24582 100644
+--- a/tests/test-nexthop-list.cpp
++++ b/tests/test-nexthop-list.cpp
+@@ -98,8 +98,6 @@
+   list.addNextHop(hopA);
+   list.addNextHop(hopZ);
+ 
+-  list.sort();
+-
+   NexthopList::iterator it = list.begin();
+   BOOST_CHECK_EQUAL(it->getConnectingFaceUri(), hopA.getConnectingFaceUri());
+ 
+@@ -108,12 +106,30 @@
+   list.addNextHop(hopZ);
+   list.addNextHop(hopA);
+ 
+-  list.sort();
+-
+   it = list.begin();
+   BOOST_CHECK_EQUAL(it->getConnectingFaceUri(), hopA.getConnectingFaceUri());
+ }
+ 
++BOOST_AUTO_TEST_CASE(SortOnAdd)
++{
++  NexthopList list;
++
++  NextHop hopA("A", 10);
++  NextHop hopB("B", 5);
++  NextHop hopC("C", 25);
++
++  list.addNextHop(hopA);
++  list.addNextHop(hopB);
++  list.addNextHop(hopC);
++
++  double lastCost = 0;
++
++  for (const auto& hop : list) {
++    BOOST_CHECK(hop.getRouteCost() > lastCost);
++    lastCost = hop.getRouteCost();
++  }
++}
++
+ BOOST_AUTO_TEST_SUITE_END()
+ 
+ } //namespace test

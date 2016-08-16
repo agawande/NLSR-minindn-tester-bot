@@ -1,0 +1,1 @@
+GET https://gerrit.named-data.net/a/changes/?q=1491&o=CURRENT_REVISION&o=CURRENT_COMMIT&o=CURRENT_FILES&o=DOWNLOAD_COMMANDS

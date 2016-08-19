@@ -25,8 +25,8 @@ for x in tmp:
 #print(reviewid)
 rev = GerritReview("", labels={'Code-Review': '+1'})
 #print rev
-rvd = rest.review("1941", "4", rev)
-print rvd == None
+#rvd = rest.review("1941", "4", rev)
+#print rvd == None
 
 #for tcm in rvd:
 #    print tcm

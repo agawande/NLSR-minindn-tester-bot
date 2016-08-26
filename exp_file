@@ -1,1 +1,1 @@
-minindn --experiment=pingall --ctime=30 --nPings=10 --no-cli
+Convergence test:minindn --experiment=pingall --ctime=30 --nPings=10 --no-cli

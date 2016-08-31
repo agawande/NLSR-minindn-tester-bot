@@ -18,11 +18,12 @@ class TestNLSR(object):
     def __init__(self, options):
         self.exp_file = os.path.abspath(options.exp_file)
         self.work_dir = os.path.abspath(options.work_dir)
+        self.exp_names = ""
         self.record_file = "{}/record.json".format(self.work_dir)
         self.ndncxx_dir = "{}/ndn-cxx".format(self.work_dir)
         self.nfd_dir = "{}/NFD".format(self.work_dir)
         self.nlsr_dir = "{}/NLSR".format(self.work_dir)
-        self.url = "https://gerrit.named-data.net"  #s
+        self.url = "https://gerrit.named-data.net"
         self.auth = HTTPDigestAuth('ashlesh', '')
         self.rest = GerritRestAPI(url=self.url, auth=self.auth)
         self.rev = GerritReview()
@@ -94,12 +95,14 @@ class TestNLSR(object):
 
     def test_minindn(self):
         """ Convergence test """
+        self.exp_names = ""
         with open(self.exp_file) as test_file:
             for line in test_file:
                 exp = line.split(":")
                 test_name = exp[0]
                 print "Running minindn test {}".format(test_name)
                 print test_name
+                self.exp_names += test_name + "\n"
                 proc = subprocess.Popen(exp[1].split())
                 proc.wait()
                 if proc.returncode == 1:
@@ -121,7 +124,8 @@ class TestNLSR(object):
             return 1
         else:
             print "All tests passed!"
-            self.message += "All tests passed!"
+            self.message = "All tests passed!"
+            #self.message += self.exp_names + "\n"
             self.score = 1
         return 0
 

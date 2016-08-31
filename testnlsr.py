@@ -6,6 +6,7 @@ import os
 import sys
 import argparse
 import json
+import shutil
 
 from requests.auth import HTTPDigestAuth
 from pygerrit.rest import GerritRestAPI
@@ -40,6 +41,15 @@ class TestNLSR(object):
         ##subprocess.call("rm -rf {}/build".format(self.ndncxx_dir).split())
         #subprocess.call("rm -rf {}/build".format(self.nfd_dir).split())
         #subprocess.call("rm -rf {}/build".format(self.nlsr_dir).split())
+        #REMOVE # FROM ABOVE LINES
+        self.clearTmp()
+
+    def clearTmp(self):
+        os.chdir("/tmp")
+        dir = [d for d in os.listdir('/tmp') if os.path.isdir(os.path.join('/tmp', d))]
+        for f in dir:
+            if not f.startswith('.'):
+                shutil.rmtree(f)
 
     def update_src(self, source):
         """ Update dependency helper """
@@ -105,6 +115,7 @@ class TestNLSR(object):
                 self.exp_names += test_name + "\n"
                 proc = subprocess.Popen(exp[1].split())
                 proc.wait()
+                self.clearTmp()
                 if proc.returncode == 1:
                     return 1, test_name
         return 0, test_name

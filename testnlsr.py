@@ -8,9 +8,9 @@ import argparse
 import json
 import shutil
 
-from requests.auth import HTTPDigestAuth
-from pygerrit.rest import GerritRestAPI
-from pygerrit.rest import GerritReview
+from pygerrit2.rest import GerritRestAPI
+from pygerrit2.rest import GerritReview
+from pygerrit2.rest.auth import HTTPDigestAuthFromNetrc
 
 class TestNLSR(object):
     """ Test NLSR class """
@@ -25,7 +25,7 @@ class TestNLSR(object):
         self.nfd_dir = "{}/NFD".format(self.work_dir)
         self.nlsr_dir = "{}/NLSR".format(self.work_dir)
         self.url = "https://gerrit.named-data.net"
-        self.auth = HTTPDigestAuth('ashlesh', '')
+        self.auth = HTTPDigestAuthFromNetrc(url=self.url)
         self.rest = GerritRestAPI(url=self.url, auth=self.auth)
         self.rev = GerritReview()
         self.tested = {}
@@ -38,7 +38,7 @@ class TestNLSR(object):
         self.message = ""
         self.score = 0
         self.labels = {}
-        ##subprocess.call("rm -rf {}/build".format(self.ndncxx_dir).split())
+        #subprocess.call("rm -rf {}/build".format(self.ndncxx_dir).split())
         #subprocess.call("rm -rf {}/build".format(self.nfd_dir).split())
         #subprocess.call("rm -rf {}/build".format(self.nlsr_dir).split())
         #REMOVE # FROM ABOVE LINES
@@ -92,7 +92,9 @@ class TestNLSR(object):
 
     def clean_up(self, change_id):
         """ Clean up git NLSR"""
+        print "Cleaning NLSR git branch"
         subprocess.call("git checkout master".split())
+        print subprocess.check_output("git branch -v".split())
         subprocess.call("git branch -D {}".format(change_id).split())
 
     def has_code_changes(self):
@@ -112,10 +114,11 @@ class TestNLSR(object):
                 test_name = exp[0]
                 print "Running minindn test {}".format(test_name)
                 print test_name
-                self.exp_names += test_name + "\n"
+                self.exp_names += test_name + "\n\n"
                 proc = subprocess.Popen(exp[1].split())
                 proc.wait()
                 self.clearTmp()
+                os.chdir(self.nlsr_dir)
                 if proc.returncode == 1:
                     return 1, test_name
         return 0, test_name
@@ -123,6 +126,7 @@ class TestNLSR(object):
     def test(self):
         """ Update and run test """
         os.chdir(self.nlsr_dir)
+        self.message = ""
         subprocess.call("./waf distclean".split())
         subprocess.call("./waf configure".split())
         subprocess.call("./waf")
@@ -135,8 +139,9 @@ class TestNLSR(object):
             return 1
         else:
             print "All tests passed!"
-            self.message = "All tests passed!"
-            #self.message += self.exp_names + "\n"
+            self.message = "All tests passed! \n\n"
+            self.message += self.exp_names
+            print self.message
             self.score = 1
         return 0
 
@@ -213,7 +218,7 @@ class TestNLSR(object):
                     json.dump(self.tested, f)
                     f.close()
             print "\n--------------------------------------------------------\n"
-            time.sleep(5)
+            time.sleep(2)
 
 if __name__ == "__main__":
 
@@ -231,4 +236,4 @@ if __name__ == "__main__":
 
     while 1:
         TEST.get_changes_to_test()
-        time.sleep(600)
+        time.sleep(900)

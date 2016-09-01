@@ -38,6 +38,7 @@ class TestNLSR(object):
         self.message = ""
         self.score = 0
         self.labels = {}
+        # Need to check whether these directories exist first
         #subprocess.call("rm -rf {}/build".format(self.ndncxx_dir).split())
         #subprocess.call("rm -rf {}/build".format(self.nfd_dir).split())
         #subprocess.call("rm -rf {}/build".format(self.nlsr_dir).split())
@@ -189,6 +190,8 @@ class TestNLSR(object):
                 # update source
                 if self.update_dep() != 0:
                     print "Unable to compile!"
+                    self.rev.set_message("Unable to compile this patch!")
+                    self.rev.add_labels({'Verified': 0})
                 else:
                     print "Pulling patch to a new branch..."
                     subprocess.call("git checkout -b {}".format(change_id).split())
@@ -204,10 +207,12 @@ class TestNLSR(object):
                         print "Commenting"
                         self.rev.set_message(self.message)
                         self.rev.add_labels({'Verified': self.score})
-                        print self.rev
-                        #self.rest.review(change_id, patch, self.rev)
                     else:
                         print "No change in code"
+                        self.rev.set_message("No change in code, skipped testing!")
+                        self.rev.add_labels({'Verified': 0})
+                print self.rev
+                self.rest.review(change_id, patch, self.rev)
                 # clean the NLSR directory
                 self.clean_up(change_id)
                 self.tested[change_id] = ref
@@ -218,7 +223,7 @@ class TestNLSR(object):
                     json.dump(self.tested, f)
                     f.close()
             print "\n--------------------------------------------------------\n"
-            time.sleep(2)
+            time.sleep(30)
 
 if __name__ == "__main__":
 

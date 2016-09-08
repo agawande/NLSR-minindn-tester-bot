@@ -68,11 +68,14 @@ class TestNLSR(object):
                 ret = subprocess.call("./waf configure --without-websocket".split())
             else:
                 ret = subprocess.call("./waf configure".split())
-            ret = subprocess.call("./waf")
-            print ret
-            if ret != 0:
+            if subprocess.call("./waf") != 0:
                 return ret
-            return subprocess.call("sudo ./waf install".split())
+            subprocess.call("sudo ./waf install".split())
+            # Need to update NFD after ndn-cxx is updated so clean the build folder of NFD!
+            # So that next time this method is called NFD is guaranteed to be recompiled
+            if source == self.ndncxx_dir:
+                os.chdir(self.nfd_dir)
+                subprocess.call("./waf distclean".split())
         return 0
 
     def update_dep(self):
@@ -81,8 +84,7 @@ class TestNLSR(object):
         for source in directory:
             print source
             dir_name = source.split("/")[len(source.split("/"))-1]
-            # dir does not exist or build folder does not exists (i.e. no compilation has been done yet)
-            if not os.path.isdir(source): #or not os.path.isdir(full_source.format("build")):
+            if not os.path.isdir(source):
                 clone = "git clone --depth 1 https://github.com/named-data/{} {}" \
                         .format(dir_name, source)
                 subprocess.call(clone.split())
@@ -90,6 +92,11 @@ class TestNLSR(object):
             if ret != 0:
                 return ret
         return 0
+
+    #def whetherNFDWorks():
+    #    ret = subprocess.call("nfd-start")
+    #    subprocess.call("nfd-stop")
+    #    return ret
 
     def clean_up(self, change_id):
         """ Clean up git NLSR"""
@@ -119,6 +126,7 @@ class TestNLSR(object):
                 proc = subprocess.Popen(exp[1].split())
                 proc.wait()
                 self.clearTmp()
+                subprocess.call("mn --clean".split())
                 os.chdir(self.nlsr_dir)
                 if proc.returncode == 1:
                     return 1, test_name
@@ -140,7 +148,7 @@ class TestNLSR(object):
             return 1
         else:
             print "All tests passed!"
-            self.message = "All tests passed! \n\n"
+            self.message = "NLSR tester bot: \n\nAll tests passed! \n\n"
             self.message += self.exp_names
             print self.message
             self.score = 1
@@ -150,7 +158,7 @@ class TestNLSR(object):
         """ Pull the changes testable patches """
         # Get open NLSR changes already verified by Jenkins and mergable
         changes = self.rest.get("changes/?q=status:open+project:NLSR+ \
-                                reviewedby:jenkins+is:mergeable+label:verified")
+                                 reviewedby:jenkins+is:mergeable+label:verified")
 
         # iterate over testable changes
         for change in changes:
@@ -172,8 +180,7 @@ class TestNLSR(object):
             #print comments['labels']['Verified']['all']
             #for cmnt in comments['labels']['Verified']['all']:
             #    print cmnt
-
-            if change_id in self.tested:
+            if change_id in self.tested and self.tested[change_id] == ref:
                 print "Already tested!"
                 #USE A FILE INSTEAD OF SELF.TESTED SO THAT WE CAN RECOVER FROM FATAL FAILURES
                 # check if the change has been merged/abandoned, if so remove from tested
@@ -190,9 +197,13 @@ class TestNLSR(object):
                 # update source
                 if self.update_dep() != 0:
                     print "Unable to compile!"
-                    self.rev.set_message("Unable to compile this patch!")
+                    self.rev.set_message("NLSR tester bot: Unable to compile this patch!")
                     self.rev.add_labels({'Verified': 0})
                 else:
+                    # Exit if NFD is not working
+                    #if whetherNFDWorks() != 0:
+                    #    print "NFD is not working"
+                    #    sys.exit(1)
                     print "Pulling patch to a new branch..."
                     subprocess.call("git checkout -b {}".format(change_id).split())
                     patch_download_cmd = "git pull {}/NLSR {}".format(self.url, ref)
@@ -209,7 +220,7 @@ class TestNLSR(object):
                         self.rev.add_labels({'Verified': self.score})
                     else:
                         print "No change in code"
-                        self.rev.set_message("No change in code, skipped testing!")
+                        self.rev.set_message("NLSR tester bot: No change in code, skipped testing!")
                         self.rev.add_labels({'Verified': 0})
                 print self.rev
                 self.rest.review(change_id, patch, self.rev)

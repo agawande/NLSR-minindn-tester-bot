@@ -1,2 +1,0 @@
-4 node convergence test:minindn --experiment=convergence --ctime=30 --no-cli
-4 node mcn failure test:minindn --experiment=mcn-failure-convergence --ctime=30 --no-cli

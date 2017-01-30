@@ -55,20 +55,22 @@ class TestNLSR(object):
     def update_src(self, source):
         """ Update dependency helper """
         os.chdir(source)
+        subprocess.call("git checkout master".split())
         update_needed = subprocess.check_output("git pull".split())
+        print(source)
         # Is upto date and build folder exists
         if update_needed.strip() == "Already up-to-date." and \
            os.path.isdir("{}/build".format(source)):
             print "{} already up to date".format(source)
-            #if not os.path.isdir(full_source.format("build")):
             return 0
+
         subprocess.call("./waf distclean".split())
         if self.nlsr_dir != source:
             if self.nfd_dir == source:
                 ret = subprocess.call("./waf configure --without-websocket".split())
             else:
                 ret = subprocess.call("./waf configure".split())
-            if subprocess.call("./waf") != 0:
+            if subprocess.call("./waf -j1".split()) != 0:
                 return ret
             subprocess.call("sudo ./waf install".split())
             # Need to update NFD after ndn-cxx is updated so clean the build folder of NFD!
@@ -93,11 +95,6 @@ class TestNLSR(object):
                 return ret
         return 0
 
-    #def whetherNFDWorks():
-    #    ret = subprocess.call("nfd-start")
-    #    subprocess.call("nfd-stop")
-    #    return ret
-
     def clean_up(self, change_id):
         """ Clean up git NLSR"""
         print "Cleaning NLSR git branch"
@@ -109,12 +106,13 @@ class TestNLSR(object):
         """ Check if the patch has code changes """
         os.chdir(self.nlsr_dir)
         out = subprocess.check_output("git diff --name-status HEAD~1".split())
-        if "cpp" in out or "hpp" in out or "wscript" in out:
+        if "cpp" in out or "hpp" in out or "wscript" in out or "nlsr.conf" in out:
             return True
         return False
 
     def test_minindn(self):
         """ Convergence test """
+        subprocess.call("sudo ldconfig".split())
         self.exp_names = ""
         with open(self.exp_file) as test_file:
             for line in test_file:
@@ -143,8 +141,8 @@ class TestNLSR(object):
         code, test = self.test_minindn()
         if code == 1:
             print "Test {} failed!".format(test)
-            self.message = "Test {} failed!".format(test)
-            self.score = -1
+            self.message = "NLSR tester bot: Test {} failed!".format(test)
+            self.score = 0
             return 1
         else:
             print "All tests passed!"
@@ -157,9 +155,10 @@ class TestNLSR(object):
     def get_changes_to_test(self):
         """ Pull the changes testable patches """
         # Get open NLSR changes already verified by Jenkins and mergable
-        changes = self.rest.get("changes/?q=status:open+project:NLSR+ \
-                                 reviewedby:jenkins+is:mergeable+label:verified")
-
+        #changes = self.rest.get("changes/?q=status:open+project:NLSR+reviewedby:jenkins+is:mergeable+label:verified")
+        changes = self.rest.get("changes/?q=status:open+project:NLSR+branch:master+is:mergeable+label:verified")
+        #changes = self.rest.get("changes/?q=change:3600")
+        print("changes", changes)
         # iterate over testable changes
         for change in changes:
             print "Checking patch: {}".format(change['subject'])
@@ -180,19 +179,28 @@ class TestNLSR(object):
             #print comments['labels']['Verified']['all']
             #for cmnt in comments['labels']['Verified']['all']:
             #    print cmnt
+
+            # Reload file to see there are any changes - used for retrigger purposes
+            with open(self.record_file) as f:
+                try:
+                    self.tested = json.load(f)
+                except ValueError:
+                    print("File is empty")
+
             if change_id in self.tested and self.tested[change_id] == ref:
                 print "Already tested!"
-                #USE A FILE INSTEAD OF SELF.TESTED SO THAT WE CAN RECOVER FROM FATAL FAILURES
                 # check if the change has been merged/abandoned, if so remove from tested
-                if self.rest.get("changes/?q=status:open+%s" % change_num) is None:
-                    self.tested.pop(change_id, None)
-                    # clear the file
-                    open(self.record_file, 'w').close()
-                    # update contents of the file
-                    with open(self.record_file, 'w') as f:
-                        json.dump(self.tested, f)
-                        f.close()
-                    continue
+                #self.tested2 = self.tested
+                #for cid in self.tested2:
+                #    if len(self.rest.get("changes/?q=status:open+%s" % cid)) == 0:
+                #        self.tested.pop(change_id, None)
+                        # clear the file
+                #        open(self.record_file, 'w').close()
+                        # update contents of the file
+                #with open(self.record_file, 'w') as f:
+                #    json.dump(self.tested, f)
+                #    f.close()
+                continue
             else:
                 # update source
                 if self.update_dep() != 0:
@@ -200,10 +208,6 @@ class TestNLSR(object):
                     self.rev.set_message("NLSR tester bot: Unable to compile this patch!")
                     self.rev.add_labels({'Verified': 0})
                 else:
-                    # Exit if NFD is not working
-                    #if whetherNFDWorks() != 0:
-                    #    print "NFD is not working"
-                    #    sys.exit(1)
                     print "Pulling patch to a new branch..."
                     subprocess.call("git checkout -b {}".format(change_id).split())
                     patch_download_cmd = "git pull {}/NLSR {}".format(self.url, ref)
@@ -222,17 +226,22 @@ class TestNLSR(object):
                         print "No change in code"
                         self.rev.set_message("NLSR tester bot: No change in code, skipped testing!")
                         self.rev.add_labels({'Verified': 0})
+
                 print self.rev
-                self.rest.review(change_id, patch, self.rev)
+                #self.rest.review(change_id, patch, self.rev)
+
                 # clean the NLSR directory
                 self.clean_up(change_id)
                 self.tested[change_id] = ref
+
                 # clear the file
                 open(self.record_file, 'w').close()
+
                 # write contents to the file
                 with open(self.record_file, 'w') as f:
                     json.dump(self.tested, f)
                     f.close()
+
             print "\n--------------------------------------------------------\n"
             time.sleep(30)
 

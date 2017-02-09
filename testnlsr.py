@@ -20,7 +20,6 @@ class TestNLSR(object):
         self.exp_file = os.path.abspath(options.exp_file)
         self.work_dir = os.path.abspath(options.work_dir)
         self.exp_names = ""
-        self.record_file = "{}/record.json".format(self.work_dir)
         self.ndncxx_dir = "{}/ndn-cxx".format(self.work_dir)
         self.nfd_dir = "{}/NFD".format(self.work_dir)
         self.nlsr_dir = "{}/NLSR".format(self.work_dir)
@@ -28,13 +27,6 @@ class TestNLSR(object):
         self.auth = HTTPDigestAuthFromNetrc(url=self.url)
         self.rest = GerritRestAPI(url=self.url, auth=self.auth)
         self.rev = GerritReview()
-        self.tested = {}
-        if not os.path.exists(self.record_file) or \
-           os.stat(self.record_file).st_size == 0:
-            self.tested = {}
-        else:
-            with open(self.record_file) as f:
-                self.tested = json.load(f)
         self.message = ""
         self.score = 0
         self.labels = {}
@@ -70,7 +62,7 @@ class TestNLSR(object):
                 ret = subprocess.call("./waf configure --without-websocket".split())
             else:
                 ret = subprocess.call("./waf configure".split())
-            if subprocess.call("./waf -j1".split()) != 0:
+            if subprocess.call("./waf -j2".split()) != 0:
                 return ret
             subprocess.call("sudo ./waf install".split())
             # Need to update NFD after ndn-cxx is updated so clean the build folder of NFD!
@@ -136,13 +128,15 @@ class TestNLSR(object):
         self.message = ""
         subprocess.call("./waf distclean".split())
         subprocess.call("./waf configure".split())
-        subprocess.call("./waf")
+        subprocess.call("./waf -j2".split())
         subprocess.call("sudo ./waf install".split())
         code, test = self.test_minindn()
         if code == 1:
             print "Test {} failed!".format(test)
-            self.message = "NLSR tester bot: Test {} failed!".format(test)
-            self.score = 0
+            self.message = "NLSR tester bot: Following tests passed: \n"
+            self.message += self.exp_names
+            self.message += "NLSR tester bot: Test {} failed!".format(test)
+            self.score = -1
             return 1
         else:
             print "All tests passed!"
@@ -154,10 +148,9 @@ class TestNLSR(object):
 
     def get_changes_to_test(self):
         """ Pull the changes testable patches """
-        # Get open NLSR changes already verified by Jenkins and mergable
-        #changes = self.rest.get("changes/?q=status:open+project:NLSR+reviewedby:jenkins+is:mergeable+label:verified")
-        changes = self.rest.get("changes/?q=status:open+project:NLSR+branch:master+is:mergeable+label:verified")
-        #changes = self.rest.get("changes/?q=change:3600")
+        # Get open NLSR changes already verified by Jenkins and mergable and not verified by self
+        changes = self.rest.get("changes/?q=status:open+project:NLSR+branch:master+is:mergeable+label:verified+label:Verified-Integration=0")
+
         print("changes", changes)
         # iterate over testable changes
         for change in changes:
@@ -175,72 +168,33 @@ class TestNLSR(object):
             print patch
             print ref
 
-            #comments = self.rest.get("/changes/{}/revisions/{}/review/".format(change_id, patch))
-            #print comments['labels']['Verified']['all']
-            #for cmnt in comments['labels']['Verified']['all']:
-            #    print cmnt
-
-            # Reload file to see there are any changes - used for retrigger purposes
-            with open(self.record_file) as f:
-                try:
-                    self.tested = json.load(f)
-                except ValueError:
-                    print("File is empty")
-
-            if change_id in self.tested and self.tested[change_id] == ref:
-                print "Already tested!"
-                # check if the change has been merged/abandoned, if so remove from tested
-                #self.tested2 = self.tested
-                #for cid in self.tested2:
-                #    if len(self.rest.get("changes/?q=status:open+%s" % cid)) == 0:
-                #        self.tested.pop(change_id, None)
-                        # clear the file
-                #        open(self.record_file, 'w').close()
-                        # update contents of the file
-                #with open(self.record_file, 'w') as f:
-                #    json.dump(self.tested, f)
-                #    f.close()
-                continue
+            # update source
+            if self.update_dep() != 0:
+                print "Unable to compile!"
+                self.rev.set_message("NLSR tester bot: Unable to compile this patch!")
+                self.rev.add_labels({'Verified': 0})
             else:
-                # update source
-                if self.update_dep() != 0:
-                    print "Unable to compile!"
-                    self.rev.set_message("NLSR tester bot: Unable to compile this patch!")
-                    self.rev.add_labels({'Verified': 0})
+                print "Pulling patch to a new branch..."
+                subprocess.call("git checkout -b {}".format(change_id).split())
+                patch_download_cmd = "git pull {}/NLSR {}".format(self.url, ref)
+                print patch_download_cmd
+                subprocess.call(patch_download_cmd.split())
+
+                # Check if there has been a change in cpp, hpp, or wscript files
+                if self.has_code_changes():
+                    # Test the change
+                    print "Testing NLSR patch"
+                    self.test()
+                    print "Commenting"
+                    self.rev.set_message(self.message)
+                    self.rev.add_labels({'Verified-Integration': self.score})
                 else:
-                    print "Pulling patch to a new branch..."
-                    subprocess.call("git checkout -b {}".format(change_id).split())
-                    patch_download_cmd = "git pull {}/NLSR {}".format(self.url, ref)
-                    print patch_download_cmd
-                    subprocess.call(patch_download_cmd.split())
+                    print "No change in code"
+                    self.rev.set_message("NLSR tester bot: No change in code, skipped testing!")
+                    self.rev.add_labels({'Verified-Integration': 1})
 
-                    # Check if there has been a change in cpp, hpp, or wscript files
-                    if self.has_code_changes():
-                        # Test the change
-                        print "Testing NLSR patch"
-                        self.test()
-                        print "Commenting"
-                        self.rev.set_message(self.message)
-                        self.rev.add_labels({'Verified': self.score})
-                    else:
-                        print "No change in code"
-                        self.rev.set_message("NLSR tester bot: No change in code, skipped testing!")
-                        self.rev.add_labels({'Verified': 0})
-
-                print self.rev
-                #self.rest.review(change_id, patch, self.rev)
-
-                # clean the NLSR directory
-                self.clean_up(change_id)
-                self.tested[change_id] = ref
-
-                # clear the file
-                open(self.record_file, 'w').close()
-
-                # write contents to the file
-                with open(self.record_file, 'w') as f:
-                    json.dump(self.tested, f)
-                    f.close()
+            print self.rev
+            self.rest.review(change_id, patch, self.rev)
 
             print "\n--------------------------------------------------------\n"
             time.sleep(30)

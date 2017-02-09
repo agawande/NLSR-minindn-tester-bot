@@ -2,10 +2,14 @@ Usage: sudo python testnlsr.py exp_file work_dir
 
 sudo python testnlsr.py --help
 
+The bot is dependent on:
+(1) PyGerrit2
+(2) Mini-NDN
+
 Without stopping testnlsr:
 (1) exp_file can be update anytime to add new experiments
 (2) minindn can be updated anytime
-(3) work_dir/record.json can be updated if something goes wrong to retest a patch
+(3) To retrigger a patch simply change the verified-integration score to zero on your patch
 
 Mini-NDN is modified to make it work on the arcturus machine:
 (1) Uses nfd.conf.sample by default instead of nfd.conf
@@ -14,3 +18,6 @@ Mini-NDN is modified to make it work on the arcturus machine:
 (4) New experiments:
     (4.1) Convergence - does nothing, exits after convergence
     (4.2) MCN failure convergence - same as MCN failure but no pings and checks convergence after node comes back up
+(5) Need to update mini-ndn master branch and then rebase on branch arcturus to get any new changes of Mini-NDN
+
+Will move away from arcturus so as to use Mini-NDN as it is.

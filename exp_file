@@ -3,4 +3,5 @@
 10 node convergence test:minindn --experiment=convergence --no-cli /usr/local/etc/mini-ndn/minindn.ucla.conf
 10 node mcn failure convergence test:minindn --experiment=mcn-failure-convergence --no-cli /usr/local/etc/mini-ndn/minindn.ucla.conf
 10 node HR convergence test:minindn --experiment=convergence --no-cli --hr /usr/local/etc/mini-ndn/minindn.ucla.conf
+10 node HR convergence test w/security:minindn --experiment=convergence --no-cli --hr /usr/local/etc/mini-ndn/minindn.ucla.conf --nlsr-security
 4 node convergence test with security:minindn --experiment=convergence --no-cli --nlsr-security

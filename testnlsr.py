@@ -193,6 +193,7 @@ class TestNLSR(object):
                     self.rev.set_message("NLSR tester bot: No change in code, skipped testing!")
                     self.rev.add_labels({'Verified-Integration': 1})
 
+            self.clean_up(change_id)
             print self.rev
             self.rest.review(change_id, patch, self.rev)
 

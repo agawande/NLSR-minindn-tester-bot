@@ -133,9 +133,7 @@ class TestNLSR(object):
         code, test = self.test_minindn()
         if code == 1:
             print "Test {} failed!".format(test)
-            self.message = "NLSR tester bot: Following tests passed: \n"
-            self.message += self.exp_names
-            self.message += "NLSR tester bot: Test {} failed!".format(test)
+            self.message = "NLSR tester bot: Test {} failed!".format(test)
             self.score = -1
             return 1
         else:
@@ -198,7 +196,7 @@ class TestNLSR(object):
             self.rest.review(change_id, patch, self.rev)
 
             print "\n--------------------------------------------------------\n"
-            time.sleep(30)
+            time.sleep(60)
 
 if __name__ == "__main__":
 

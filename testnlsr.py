@@ -17,12 +17,13 @@ class TestNLSR(object):
 
     # pylint: disable=too-many-instance-attributes
     def __init__(self, options):
-        self.exp_file = os.path.abspath(options.exp_file)
+        self.nlsr_exp_file = os.path.abspath(options.nlsr_exp_file)
         self.work_dir = os.path.abspath(options.work_dir)
         self.exp_names = ""
         self.ndncxx_dir = "{}/ndn-cxx".format(self.work_dir)
         self.nfd_dir = "{}/NFD".format(self.work_dir)
         self.nlsr_dir = "{}/NLSR".format(self.work_dir)
+        self.minindn_dir = "{}/mini-ndn".format(self.work_dir)
         self.url = "https://gerrit.named-data.net"
         self.auth = HTTPDigestAuthFromNetrc(url=self.url)
         self.rest = GerritRestAPI(url=self.url, auth=self.auth)
@@ -56,6 +57,11 @@ class TestNLSR(object):
             print "{} already up to date".format(source)
             return 0
 
+        if source == self.minindn_dir:
+            os.chdir(self.minindn_dir)
+            ret = subprocess.call("sudo ./install.sh -i".split())
+            return ret
+
         subprocess.call("./waf distclean".split())
         if self.nlsr_dir != source:
             if self.nfd_dir == source:
@@ -74,7 +80,7 @@ class TestNLSR(object):
 
     def update_dep(self):
         """ Update dependencies """
-        directory = [self.ndncxx_dir, self.nfd_dir, self.nlsr_dir]
+        directory = [self.ndncxx_dir, self.nfd_dir, self.nlsr_dir, self.minindn_dir]
         for source in directory:
             print source
             dir_name = source.split("/")[len(source.split("/"))-1]
@@ -87,9 +93,10 @@ class TestNLSR(object):
                 return ret
         return 0
 
-    def clean_up(self, change_id):
-        """ Clean up git NLSR"""
-        print "Cleaning NLSR git branch"
+    def clean_up(self, change_id, dir):
+        """ Clean up git"""
+        os.chdir(dir)
+        print "Cleaning NLSR/Mini-NDN git branch"
         subprocess.call("git checkout master".split())
         print subprocess.check_output("git branch -v".split())
         subprocess.call("git branch -D {}".format(change_id).split())
@@ -102,11 +109,11 @@ class TestNLSR(object):
             return True
         return False
 
-    def test_minindn(self):
+    def run_tests(self):
         """ Convergence test """
         subprocess.call("sudo ldconfig".split())
         self.exp_names = ""
-        with open(self.exp_file) as test_file:
+        with open(self.nlsr_exp_file) as test_file:
             for line in test_file:
                 exp = line.split(":")
                 test_name = exp[0]
@@ -117,20 +124,19 @@ class TestNLSR(object):
                 proc.wait()
                 self.clearTmp()
                 subprocess.call("mn --clean".split())
-                os.chdir(self.nlsr_dir)
                 if proc.returncode == 1:
                     return 1, test_name
         return 0, test_name
 
-    def test(self):
-        """ Update and run test """
+    def test_nlsr(self):
+        """ Update and run NLSR test """
         os.chdir(self.nlsr_dir)
         self.message = ""
         subprocess.call("./waf distclean".split())
         subprocess.call("./waf configure".split())
         subprocess.call("./waf -j2".split())
         subprocess.call("sudo ./waf install".split())
-        code, test = self.test_minindn()
+        code, test = self.run_tests()
         if code == 1:
             print "Test {} failed!".format(test)
             self.message = "NLSR tester bot: Test {} failed!".format(test)
@@ -144,12 +150,62 @@ class TestNLSR(object):
             self.score = 1
         return 0
 
+    def test_minindn(self):
+        """ Update and run Mini-NDN test"""
+        os.chdir(self.minindn_dir)
+        self.message = ""
+        subprocess.call("sudo ./install.sh -i".split())
+
+        exp = subprocess.check_output("minindn --list-experiments".split())
+        exp = exp.replace("  ", "")
+        exp = exp.split("\n")
+        exp = exp[1:len(exp)-1]
+
+        code = 0
+        test_name = ""
+        for test_name in exp:
+            if test_name == "failure":
+                continue
+            print "Running minindn test {}".format(test_name)
+            print test_name
+            self.exp_names += test_name + "\n\n"
+            exp_full = "sudo minindn --experiment {} --no-cli".format(test_name)
+            proc = subprocess.Popen(exp_full.split())
+            proc.wait()
+            self.clearTmp()
+            subprocess.call("mn --clean".split())
+            if proc.returncode == 1:
+               code = 1
+               test = test_name
+               break
+
+        if code == 1:
+            print "Test {} failed!".format(test)
+            self.message = "Mini-NDN tester bot: Test {} failed!".format(test)
+            self.score = -1
+            return 1
+        else:
+            print "All tests passed!"
+            self.message = "Mini-NDN tester bot: \n\nAll tests passed! \n\n"
+            self.message += self.exp_names
+            print self.message
+            self.score = 1
+        return 0
+
+
     def get_changes_to_test(self):
         """ Pull the changes testable patches """
         # Get open NLSR changes already verified by Jenkins and mergable and not verified by self
         changes = self.rest.get("changes/?q=status:open+project:NLSR+branch:master+is:mergeable+label:verified+label:Verified-Integration=0")
 
+        testMinindn = False
+
+        if len(changes) == 0:
+            changes = self.rest.get("changes/?q=status:open+project:mini-ndn+is:mergeable+label:Verified=0")
+            testMinindn = True
+
         print("changes", changes)
+
         # iterate over testable changes
         for change in changes:
             print "Checking patch: {}".format(change['subject'])
@@ -171,8 +227,9 @@ class TestNLSR(object):
                 print "Unable to compile!"
                 self.rev.set_message("NLSR tester bot: Unable to compile this patch!")
                 self.rev.add_labels({'Verified': 0})
-            else:
-                print "Pulling patch to a new branch..."
+            elif testMinindn == False:
+                print "Pulling NLSR patch to a new branch..."
+                os.chdir(self.nlsr_dir)
                 subprocess.call("git checkout -b {}".format(change_id).split())
                 patch_download_cmd = "git pull {}/NLSR {}".format(self.url, ref)
                 print patch_download_cmd
@@ -182,7 +239,7 @@ class TestNLSR(object):
                 if self.has_code_changes():
                     # Test the change
                     print "Testing NLSR patch"
-                    self.test()
+                    self.test_nlsr()
                     print "Commenting"
                     self.rev.set_message(self.message)
                     self.rev.add_labels({'Verified-Integration': self.score})
@@ -190,8 +247,24 @@ class TestNLSR(object):
                     print "No change in code"
                     self.rev.set_message("NLSR tester bot: No change in code, skipped testing!")
                     self.rev.add_labels({'Verified-Integration': 1})
+                self.clean_up(change_id, self.nlsr_dir)
+            else:
+                print "Pulling Mini-NDN patch to a new branch..."
+                os.chdir(self.minindn_dir)
+                subprocess.call("git checkout -b {}".format(change_id).split())
+                patch_download_cmd = "git pull {}/mini-ndn {}".format(self.url, ref)
+                print patch_download_cmd
+                subprocess.call(patch_download_cmd.split())
 
-            self.clean_up(change_id)
+                # Test the change
+                print "Testing Mini-NDN patch"
+                self.test_minindn()
+                print "Commenting"
+                self.rev.set_message(self.message)
+                self.rev.add_labels({'Verified': self.score})
+
+                self.clean_up(change_id, self.minindn_dir)
+
             print self.rev
             self.rest.review(change_id, patch, self.rev)
 
@@ -202,12 +275,12 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Mini-NDN NLSR tester for gerrit')
 
-    parser.add_argument('exp_file', help='specify experiment file')
+    parser.add_argument('nlsr_exp_file', help='specify NLSR experiment file')
 
     parser.add_argument('work_dir', help='specify working dir other than /tmp')
 
     args = parser.parse_args()
-    print args.exp_file
+    print args.nlsr_exp_file
     print args.work_dir
 
     TEST = TestNLSR(args)

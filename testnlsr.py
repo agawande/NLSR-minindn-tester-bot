@@ -162,14 +162,14 @@ class TestNLSR(object):
         exp = exp[1:len(exp)-1]
 
         code = 0
-        test_name = ""
+        self.exp_names = ""
         for test_name in exp:
             if test_name == "failure":
                 continue
             print "Running minindn test {}".format(test_name)
             print test_name
             self.exp_names += test_name + "\n\n"
-            exp_full = "sudo minindn --experiment {} --no-cli".format(test_name)
+            exp_full = "sudo minindn --experiment {} --no-cli --ctime 90".format(test_name)
             proc = subprocess.Popen(exp_full.split())
             proc.wait()
             self.clearTmp()

@@ -11,13 +11,8 @@ Without stopping testnlsr:
 (2) minindn can be updated anytime
 (3) To retrigger a patch simply change the verified-integration score to zero on your patch
 
-Mini-NDN is modified to make it work on the arcturus machine:
-(1) Uses nfd.conf.sample by default instead of nfd.conf
-(2) Changes to ndn_app to correctly get PID
-(3) Sleep after NLSR to avoid default certificate error - may not be needed now
-(4) New experiments:
-    (4.1) Convergence - does nothing, exits after convergence
-    (4.2) MCN failure convergence - same as MCN failure but no pings and checks convergence after node comes back up
-(5) Need to update mini-ndn master branch and then rebase on branch arcturus to get any new changes of Mini-NDN
+This bot also tests Mini-NDN patches so as to provide up-to-date integration testing:
+(1) For Mini-NDN testing it simply tests all the experiments of Mini-NDN on the default topology.
+(2) For Mini-NDN patches the bot will use the verified label
 
-Will move away from arcturus so as to use Mini-NDN as it is.
+If conf file updated, both Mini-NDN and NLSR changes may fail and then can be updated one by one.

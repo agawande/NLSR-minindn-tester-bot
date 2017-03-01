@@ -126,6 +126,7 @@ class TestNLSR(object):
                 subprocess.call("mn --clean".split())
                 if proc.returncode == 1:
                     return 1, test_name
+                time.sleep(30)
         return 0, test_name
 
     def test_nlsr(self):
@@ -178,6 +179,7 @@ class TestNLSR(object):
                code = 1
                test = test_name
                break
+            time.sleep(30)
 
         if code == 1:
             print "Test {} failed!".format(test)

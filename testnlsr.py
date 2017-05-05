@@ -69,7 +69,7 @@ class TestNLSR(object):
             else:
                 ret = subprocess.call("./waf configure".split())
             if subprocess.call("./waf -j2".split()) != 0:
-                return ret
+                return -1
             subprocess.call("sudo ./waf install".split())
             # Need to update NFD after ndn-cxx is updated so clean the build folder of NFD!
             # So that next time this method is called NFD is guaranteed to be recompiled
@@ -89,9 +89,7 @@ class TestNLSR(object):
                         .format(dir_name, source)
                 subprocess.call(clone.split())
             ret = self.update_src(source)
-            if ret != 0:
-                return ret
-        return 0
+        return ret
 
     def clean_up(self, change_id, dir):
         """ Clean up git"""
@@ -110,22 +108,47 @@ class TestNLSR(object):
         return False
 
     def run_tests(self):
-        """ Convergence test """
-        subprocess.call("sudo ldconfig".split())
+        """ Run NLSR tests """
+        standalone="sudo minindn /tmp/minindn.conf --experiment convergence --ctime 15 --no-cli"
+        proc = subprocess.Popen(standalone.split())
+        proc.wait()
+        self.clearTmp()
+        subprocess.call("mn --clean".split())
+
+        if proc.returncode == 1:
+            return 1, "standalone test"
+        time.sleep(30)
+
+        if proc.poll() is None:
+            self.message += "Basic test: Cannot run NFD"
+
         self.exp_names = ""
         with open(self.nlsr_exp_file) as test_file:
             for line in test_file:
                 exp = line.split(":")
                 test_name = exp[0]
-                print "Running minindn test {}".format(test_name)
-                print test_name
-                self.exp_names += test_name + "\n\n"
-                proc = subprocess.Popen(exp[1].split())
-                proc.wait()
-                self.clearTmp()
-                subprocess.call("mn --clean".split())
-                if proc.returncode == 1:
-                    return 1, test_name
+
+                # Run three times if test fails
+                i = 0
+                while (i < 4):
+                    print "Running minindn test {}".format(test_name)
+                    print test_name
+                    if i == 0:
+                        self.exp_names += test_name + "\n\n"
+                    proc = subprocess.Popen(exp[1].split())
+                    proc.wait()
+                    self.clearTmp()
+                    subprocess.call("mn --clean".split())
+
+                    if proc.returncode == 1:
+                        if i == 3:
+                            return 1, test_name
+                        time.sleep(30)
+                    else:
+                        # Test was successful
+                        break
+                    i += 1
+
                 time.sleep(30)
         return 0, test_name
 
@@ -137,6 +160,7 @@ class TestNLSR(object):
         subprocess.call("./waf configure".split())
         subprocess.call("./waf -j2".split())
         subprocess.call("sudo ./waf install".split())
+        subprocess.call("sudo ldconfig".split())
         code, test = self.run_tests()
         if code == 1:
             print "Test {} failed!".format(test)
@@ -167,6 +191,7 @@ class TestNLSR(object):
         for test_name in exp:
             if test_name == "failure":
                 continue
+
             print "Running minindn test {}".format(test_name)
             print test_name
             self.exp_names += test_name + "\n\n"
@@ -199,12 +224,13 @@ class TestNLSR(object):
         """ Pull the changes testable patches """
         # Get open NLSR changes already verified by Jenkins and mergable and not verified by self
         changes = self.rest.get("changes/?q=status:open+project:NLSR+branch:master+is:mergeable+label:verified+label:Verified-Integration=0")
+        #changes = self.rest.get("changes/?q=3858")
 
         testMinindn = False
 
-        if len(changes) == 0:
-            changes = self.rest.get("changes/?q=status:open+project:mini-ndn+is:mergeable+label:Verified=0")
-            testMinindn = True
+        #if len(changes) == 0:
+        #    changes = self.rest.get("changes/?q=status:open+project:mini-ndn+is:mergeable+label:Verified=0")
+        #    testMinindn = True
 
         print("changes", changes)
 
@@ -244,28 +270,30 @@ class TestNLSR(object):
                     self.test_nlsr()
                     print "Commenting"
                     self.rev.set_message(self.message)
+                    self.rev.add_labels({'Verified': 0})
                     self.rev.add_labels({'Verified-Integration': self.score})
                 else:
                     print "No change in code"
                     self.rev.set_message("NLSR tester bot: No change in code, skipped testing!")
+                    self.rev.add_labels({'Verified': 0})
                     self.rev.add_labels({'Verified-Integration': 1})
                 self.clean_up(change_id, self.nlsr_dir)
-            else:
-                print "Pulling Mini-NDN patch to a new branch..."
-                os.chdir(self.minindn_dir)
-                subprocess.call("git checkout -b {}".format(change_id).split())
-                patch_download_cmd = "git pull {}/mini-ndn {}".format(self.url, ref)
-                print patch_download_cmd
-                subprocess.call(patch_download_cmd.split())
+            #else:
+            #    print "Pulling Mini-NDN patch to a new branch..."
+            #    os.chdir(self.minindn_dir)
+            #    subprocess.call("git checkout -b {}".format(change_id).split())
+            #    patch_download_cmd = "git pull {}/mini-ndn {}".format(self.url, ref)
+            #    print patch_download_cmd
+            #    subprocess.call(patch_download_cmd.split())
 
                 # Test the change
-                print "Testing Mini-NDN patch"
-                self.test_minindn()
-                print "Commenting"
-                self.rev.set_message(self.message)
-                self.rev.add_labels({'Verified': self.score})
+            #    print "Testing Mini-NDN patch"
+            #    self.test_minindn()
+            #    print "Commenting"
+            #    self.rev.set_message(self.message)
+            #    self.rev.add_labels({'Verified': self.score})
 
-                self.clean_up(change_id, self.minindn_dir)
+            #    self.clean_up(change_id, self.minindn_dir)
 
             print self.rev
             self.rest.review(change_id, patch, self.rev)
@@ -286,6 +314,11 @@ if __name__ == "__main__":
     print args.work_dir
 
     TEST = TestNLSR(args)
+
+    # For standalone test
+    f = open('/tmp/minindn.conf', 'w')
+    f.write('[nodes]\na: _\n[links]\n')
+    f.close()
 
     while 1:
         TEST.get_changes_to_test()

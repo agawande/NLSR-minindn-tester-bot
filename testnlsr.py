@@ -69,7 +69,7 @@ class TestNLSR(object):
             else:
                 ret = subprocess.call("./waf configure".split())
             if subprocess.call("./waf -j2".split()) != 0:
-                return -1
+                return 1
             subprocess.call("sudo ./waf install".split())
             # Need to update NFD after ndn-cxx is updated so clean the build folder of NFD!
             # So that next time this method is called NFD is guaranteed to be recompiled
@@ -109,13 +109,13 @@ class TestNLSR(object):
 
     def run_tests(self):
         """ Run NLSR tests """
-        standalone="sudo minindn /tmp/minindn.conf --experiment convergence --ctime 15 --no-cli"
+        standalone="sudo minindn /tmp/minindn.conf --experiment convergence --ctime 30 --no-cli"
         proc = subprocess.Popen(standalone.split())
         proc.wait()
         self.clearTmp()
         subprocess.call("mn --clean".split())
 
-        if proc.returncode == 1:
+        if proc.returncode != 0:
             return 1, "standalone test"
         time.sleep(30)
 
@@ -140,7 +140,7 @@ class TestNLSR(object):
                     self.clearTmp()
                     subprocess.call("mn --clean".split())
 
-                    if proc.returncode == 1:
+                    if proc.returncode != 0:
                         if i == 3:
                             return 1, test_name
                         time.sleep(30)
@@ -158,11 +158,14 @@ class TestNLSR(object):
         self.message = ""
         subprocess.call("./waf distclean".split())
         subprocess.call("./waf configure".split())
-        subprocess.call("./waf -j2".split())
+        if subprocess.call("./waf -j2".split()) != 0:
+            self.message = "Unable to compile NLSR"
+            self.score = -1
+            return 1
         subprocess.call("sudo ./waf install".split())
         subprocess.call("sudo ldconfig".split())
         code, test = self.run_tests()
-        if code == 1:
+        if code != 0:
             print "Test {} failed!".format(test)
             self.message = "NLSR tester bot: Test {} failed!".format(test)
             self.score = -1
@@ -200,7 +203,7 @@ class TestNLSR(object):
             proc.wait()
             self.clearTmp()
             subprocess.call("mn --clean".split())
-            if proc.returncode == 1:
+            if proc.returncode != 0:
                code = 1
                test = test_name
                break
@@ -252,13 +255,16 @@ class TestNLSR(object):
 
             # update source
             if self.update_dep() != 0:
-                print "Unable to compile!"
-                self.rev.set_message("NLSR tester bot: Unable to compile this patch!")
+                print "Unable to compile ndn-cxx or NFD!"
+                self.rev.set_message("NLSR tester bot: Unable to compile dependencies!")
                 self.rev.add_labels({'Verified': 0})
             elif testMinindn == False:
                 print "Pulling NLSR patch to a new branch..."
                 os.chdir(self.nlsr_dir)
-                subprocess.call("git checkout -b {}".format(change_id).split())
+                # If checkout fails due to branch already existing due to ungraceful exit before
+                if subprocess.call("git checkout -b {}".format(change_id).split()) != 0:
+                    subprocess.call("git checkout -D {}".format(change_id).split())
+                    subprocess.call("git checkout -b {}".format(change_id).split())
                 patch_download_cmd = "git pull {}/NLSR {}".format(self.url, ref)
                 print patch_download_cmd
                 subprocess.call(patch_download_cmd.split())

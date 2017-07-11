@@ -10,7 +10,7 @@ import shutil
 
 from pygerrit2.rest import GerritRestAPI
 from pygerrit2.rest import GerritReview
-from pygerrit2.rest.auth import HTTPDigestAuthFromNetrc
+from pygerrit2.rest.auth import HTTPBasicAuthFromNetrc
 
 class TestNLSR(object):
     """ Test NLSR class """
@@ -25,7 +25,7 @@ class TestNLSR(object):
         self.nlsr_dir = "{}/NLSR".format(self.work_dir)
         self.minindn_dir = "{}/mini-ndn".format(self.work_dir)
         self.url = "https://gerrit.named-data.net"
-        self.auth = HTTPDigestAuthFromNetrc(url=self.url)
+        self.auth = HTTPBasicAuthFromNetrc(self.url)
         self.rest = GerritRestAPI(url=self.url, auth=self.auth)
         self.rev = GerritReview()
         self.message = ""
@@ -35,7 +35,6 @@ class TestNLSR(object):
         #subprocess.call("rm -rf {}/build".format(self.ndncxx_dir).split())
         #subprocess.call("rm -rf {}/build".format(self.nfd_dir).split())
         #subprocess.call("rm -rf {}/build".format(self.nlsr_dir).split())
-        #REMOVE # FROM ABOVE LINES
         self.clearTmp()
 
     def clearTmp(self):
@@ -80,7 +79,8 @@ class TestNLSR(object):
 
     def update_dep(self):
         """ Update dependencies """
-        directory = [self.ndncxx_dir, self.nfd_dir, self.nlsr_dir, self.minindn_dir]
+        #directory = [self.ndncxx_dir, self.nfd_dir, self.nlsr_dir, self.minindn_dir]
+        directory = [self.nlsr_dir, self.minindn_dir]
         for source in directory:
             print source
             dir_name = source.split("/")[len(source.split("/"))-1]
@@ -178,62 +178,11 @@ class TestNLSR(object):
             self.score = 1
         return 0
 
-    def test_minindn(self):
-        """ Update and run Mini-NDN test"""
-        os.chdir(self.minindn_dir)
-        self.message = ""
-        subprocess.call("sudo ./install.sh -i".split())
-
-        exp = subprocess.check_output("minindn --list-experiments".split())
-        exp = exp.replace("  ", "")
-        exp = exp.split("\n")
-        exp = exp[1:len(exp)-1]
-
-        code = 0
-        self.exp_names = ""
-        for test_name in exp:
-            if test_name == "failure":
-                continue
-
-            print "Running minindn test {}".format(test_name)
-            print test_name
-            self.exp_names += test_name + "\n\n"
-            exp_full = "sudo minindn --experiment {} --no-cli --ctime 90".format(test_name)
-            proc = subprocess.Popen(exp_full.split())
-            proc.wait()
-            self.clearTmp()
-            subprocess.call("mn --clean".split())
-            if proc.returncode != 0:
-               code = 1
-               test = test_name
-               break
-            time.sleep(30)
-
-        if code == 1:
-            print "Test {} failed!".format(test)
-            self.message = "Mini-NDN tester bot: Test {} failed!".format(test)
-            self.score = -1
-            return 1
-        else:
-            print "All tests passed!"
-            self.message = "Mini-NDN tester bot: \n\nAll tests passed! \n\n"
-            self.message += self.exp_names
-            print self.message
-            self.score = 1
-        return 0
-
-
     def get_changes_to_test(self):
         """ Pull the changes testable patches """
         # Get open NLSR changes already verified by Jenkins and mergable and not verified by self
         changes = self.rest.get("changes/?q=status:open+project:NLSR+branch:master+is:mergeable+label:verified+label:Verified-Integration=0")
         #changes = self.rest.get("changes/?q=3858")
-
-        testMinindn = False
-
-        #if len(changes) == 0:
-        #    changes = self.rest.get("changes/?q=status:open+project:mini-ndn+is:mergeable+label:Verified=0")
-        #    testMinindn = True
 
         print("changes", changes)
 
@@ -257,8 +206,8 @@ class TestNLSR(object):
             if self.update_dep() != 0:
                 print "Unable to compile ndn-cxx or NFD!"
                 self.rev.set_message("NLSR tester bot: Unable to compile dependencies!")
-                self.rev.add_labels({'Verified': 0})
-            elif testMinindn == False:
+                self.rev.add_labels({'Verified-Integration': 0})
+            else:
                 print "Pulling NLSR patch to a new branch..."
                 os.chdir(self.nlsr_dir)
                 # If checkout fails due to branch already existing due to ungraceful exit before
@@ -276,33 +225,15 @@ class TestNLSR(object):
                     self.test_nlsr()
                     print "Commenting"
                     self.rev.set_message(self.message)
-                    self.rev.add_labels({'Verified': 0})
                     self.rev.add_labels({'Verified-Integration': self.score})
                 else:
                     print "No change in code"
                     self.rev.set_message("NLSR tester bot: No change in code, skipped testing!")
-                    self.rev.add_labels({'Verified': 0})
                     self.rev.add_labels({'Verified-Integration': 1})
                 self.clean_up(change_id, self.nlsr_dir)
-            #else:
-            #    print "Pulling Mini-NDN patch to a new branch..."
-            #    os.chdir(self.minindn_dir)
-            #    subprocess.call("git checkout -b {}".format(change_id).split())
-            #    patch_download_cmd = "git pull {}/mini-ndn {}".format(self.url, ref)
-            #    print patch_download_cmd
-            #    subprocess.call(patch_download_cmd.split())
-
-                # Test the change
-            #    print "Testing Mini-NDN patch"
-            #    self.test_minindn()
-            #    print "Commenting"
-            #    self.rev.set_message(self.message)
-            #    self.rev.add_labels({'Verified': self.score})
-
-            #    self.clean_up(change_id, self.minindn_dir)
 
             print self.rev
-            self.rest.review(change_id, patch, self.rev)
+            print(self.rest.review(change_id, patch, self.rev))
 
             print "\n--------------------------------------------------------\n"
             time.sleep(60)

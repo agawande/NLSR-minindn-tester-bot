@@ -233,7 +233,7 @@ class TestNLSR(object):
                 self.clean_up(change_id, self.nlsr_dir)
 
             print self.rev
-            print(self.rest.review(change_id, patch, self.rev))
+            self.rest.review(change_id, patch, self.rev)
 
             print "\n--------------------------------------------------------\n"
             time.sleep(60)

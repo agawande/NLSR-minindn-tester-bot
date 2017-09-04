@@ -1,9 +1,9 @@
 Usage: sudo python testnlsr.py exp_file work_dir
 
-sudo python testnlsr.py --help
+sudo python testNlsr.py --help
 
 The bot is dependent on:
-(1) PyGerrit2
+(1) PyGerrit2 (pip install pygerrit2)
 (2) Mini-NDN
 
 Without stopping testnlsr:
@@ -11,6 +11,7 @@ Without stopping testnlsr:
 (2) minindn can be updated anytime
 (3) To retrigger a patch simply change the verified-integration score to zero on your patch
 
+[Disabled since Mini-NDN runs with sudo:]
 This bot also tests Mini-NDN patches so as to provide up-to-date integration testing:
 (1) For Mini-NDN testing it simply tests all the experiments of Mini-NDN on the default topology.
 (2) For Mini-NDN patches the bot will use the verified label

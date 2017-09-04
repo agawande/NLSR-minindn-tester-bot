@@ -1,3 +1,4 @@
+Standalone test:minindn /usr/local/etc/mini-ndn/standalone.conf --experiment convergence --ctime 30 --no-cli
 4 node convergence test:minindn --experiment=convergence --no-cli
 4 node convergence test with security:minindn --experiment=convergence --no-cli --nlsr-security
 4 node mcn failure convergence test:minindn --experiment=mcn-failure-convergence --no-cli

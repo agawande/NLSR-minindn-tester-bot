@@ -112,8 +112,6 @@ class TestNLSR(object):
 
         print("changes", changes)
 
-        time.sleep(5)
-
         # iterate over testable changes
         for change in changes:
             print "Checking patch: {}".format(change['subject'])

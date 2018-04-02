@@ -24,6 +24,7 @@ class TestNLSR(object):
 
         self.ndncxx_src = SourceManager("{}/ndn-cxx".format(self.work_dir))
         self.nfd_src = SourceManager("{}/NFD".format(self.work_dir))
+        self.chronosync_src = SourceManager("{}/Chronosync".format(self.work_dir))
         self.nlsr_src = SourceManager("{}/NLSR".format(self.work_dir))
         self.minindn_src = SourceManager("{}/mini-ndn".format(self.work_dir))
 
@@ -97,8 +98,7 @@ class TestNLSR(object):
 
     def update_dep(self):
         """ Update dependencies """
-        #gitSource = [self.ndncxx_src, self.nfd_src, self.nlsr_src, self.minindn_src]
-        git_source = [self.nlsr_src, self.minindn_src]
+        git_source = [self.ndncxx_src, self.nfd_src, self.chronosync_src, self.nlsr_src, self.minindn_src]
         for source in git_source:
             if source.update_and_install() != 0:
                 return 1
@@ -108,7 +108,7 @@ class TestNLSR(object):
         """ Pull the changes testable patches """
         # Get open NLSR changes already verified by Jenkins and mergable and not verified by self
         changes = self.rest.get("changes/?q=status:open+project:NLSR+branch:master+is:mergeable+label:verified+label:Verified-Integration=0")
-        #changes = self.rest.get("changes/?q=4053")
+        #changes = self.rest.get("changes/?q=4549")
 
         print("changes", changes)
 

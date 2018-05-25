@@ -5,12 +5,16 @@ class SourceManager(object):
     """ Source Update Manager class """
 
     def __init__(self, repoDir):
-    	NDN_GIT = "https://gerrit.named-data.net"
 
     	self.repoDir = repoDir
 
         self.repoName = repoDir.split("/")[len(repoDir.split("/"))-1]
         print(self.repoName)
+        
+        if self.repoName != "ndn-cxx":
+            NDN_GIT = "https://gerrit.named-data.net"
+        else:
+            NDN_GIT = "https://github.com/named-data"
 
         if not os.path.isdir(repoDir):
             call("git clone --depth 1 {}/{} {}".format(NDN_GIT, self.repoName, self.repoDir).split())

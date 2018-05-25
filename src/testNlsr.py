@@ -9,6 +9,8 @@ import json
 import shutil
 from sourceManager import SourceManager
 
+from requests.auth import HTTPBasicAuth
+
 from pygerrit2.rest import GerritRestAPI
 from pygerrit2.rest import GerritReview
 from pygerrit2.rest.auth import HTTPBasicAuthFromNetrc
@@ -24,19 +26,19 @@ class TestNLSR(object):
 
         self.ndncxx_src = SourceManager("{}/ndn-cxx".format(self.work_dir))
         self.nfd_src = SourceManager("{}/NFD".format(self.work_dir))
-        self.chronosync_src = SourceManager("{}/Chronosync".format(self.work_dir))
+        self.chronosync_src = SourceManager("{}/ChronoSync".format(self.work_dir))
         self.nlsr_src = SourceManager("{}/NLSR".format(self.work_dir))
         self.minindn_src = SourceManager("{}/mini-ndn".format(self.work_dir))
 
         self.name_to_source = {
-            'NDN-cxx' : self.ndncxx_src,
+            #'NDN-cxx' : self.ndncxx_src,
             'NFD' : self.nfd_src,
-            'Chronosync' : self.chronosync_src,
+            'ChronoSync' : self.chronosync_src,
             'NLSR' : self.nlsr_src,
             'Mini-NDN' : self.minindn_src
         }
-        arbitraryVersionDict = {}
-        dependencyFail = False
+        self.arbitraryVersionDict = {}
+        self.dependencyFail = False
 
         self.url = "https://gerrit.named-data.net"
         self.auth = HTTPBasicAuthFromNetrc(self.url)
@@ -87,10 +89,11 @@ class TestNLSR(object):
 
     def checkForTargetVersions(self, changeNum):
         changeDetails = self.rest.get("/changes/{}/detail".format(changeNum))
-        owner = changeDetails['submitter']['username']
+        owner = changeDetails['owner']['username']
         messageList = changeDetails['messages']
         for comment in messageList:
-            if "~NDN-Robot" in comment['message'] and comment['author']['username'] == owner:
+            #TODO: change to NDN-robot
+            if "~NDN-robot" in comment['message'] and comment['author']['username'] == owner:
                 print("Arbitrary version request found...")
                 splitPairs = comment['message'].split("\n\n")
                 for pair in splitPairs:
@@ -105,9 +108,9 @@ class TestNLSR(object):
                                     if self.name_to_source[key].install_target_change(self.url, targetChangeId, targetRef) != 0:
                                         self.rev.set_message("NLSR Tester Bot: Unable to install target dependency {} version {}".format(key, targetChange))
                                         self.rev.add_labels({'Verified-Integration': 0})
-                                        dependencyFail = True
+                                        self.dependencyFail = True
                                     else:
-                                        dependencyDict[key] = targetChange
+                                        self.arbitraryVersionDict[key] = targetChange
                                 except Exception as e:
                                     print(e)
                                     sys.exit(1)
@@ -146,7 +149,7 @@ class TestNLSR(object):
         """ Pull the changes testable patches """
         # Get open NLSR changes already verified by Jenkins and mergable and not verified by self
         #changes = self.rest.get("changes/?q=status:open+project:NLSR+branch:master+is:mergeable+label:verified+label:Verified-Integration=0")
-        changes = self.rest.get("changes/?q=4549")
+        changes = self.rest.get("changes/?q=4763")
 
         print("changes", changes)
 
@@ -173,7 +176,7 @@ class TestNLSR(object):
                 self.rev.add_labels({'Verified-Integration': 0})
             else:
                 self.checkForTargetVersions(change_num)
-                if dependencyFail:
+                if self.dependencyFail:
                     print self.rev
                     self.rest.review(change_id, patch, self.rev)
                 else:
@@ -187,7 +190,11 @@ class TestNLSR(object):
                         print "Testing NLSR patch"
                         self.test_nlsr()
                         print "Commenting"
-                        if(dependencyDict):
+                        if self.arbitraryVersionDict:
+                            messageAppend = ""
+                            for key in self.arbitraryVersionDict:
+                                messageAppend += " {}:{}".format(key, self.arbitraryVersionDict[key])
+                            self.message += (" Tested with:" + messageAppend)
                         self.rev.set_message(self.message)
                         self.rev.add_labels({'Verified-Integration': self.score})
                     else:

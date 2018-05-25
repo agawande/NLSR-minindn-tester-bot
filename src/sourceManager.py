@@ -5,7 +5,7 @@ class SourceManager(object):
     """ Source Update Manager class """
 
     def __init__(self, repoDir):
-    	NDN_GIT = "https://github.com/named-data/"
+    	NDN_GIT = "https://gerrit.named-data.net"
 
     	self.repoDir = repoDir
 
@@ -61,7 +61,7 @@ class SourceManager(object):
 
     def clean_up(self, branchName):
         """ Clean up git"""
-        print "Cleaning NLSR git branch"
+        print("Cleaning {} git branch".format(self.repoName))
         self.scall("git checkout master")
         self.delete_branch(branchName)
 
@@ -70,3 +70,9 @@ class SourceManager(object):
         if "cpp" in files or "hpp" in files or "wscript" in files or "nlsr.conf" in files:
             return True
         return False
+
+    def install_target_change(self, targetURL, changeId, ref):
+        self.checkout_new_branch(changeId)
+        self.pull_from_gerrit("{}/{}".format(targetURL, self.repoName), ref)
+        self.install()
+        self.clean_up(changeId)

@@ -28,6 +28,16 @@ class TestNLSR(object):
         self.nlsr_src = SourceManager("{}/NLSR".format(self.work_dir))
         self.minindn_src = SourceManager("{}/mini-ndn".format(self.work_dir))
 
+        self.name_to_source = {
+            'NDN-cxx' : self.ndncxx_src,
+            'NFD' : self.nfd_src,
+            'Chronosync' : self.chronosync_src,
+            'NLSR' : self.nlsr_src,
+            'Mini-NDN' : self.minindn_src
+        }
+        arbitraryVersionDict = {}
+        dependencyFail = False
+
         self.url = "https://gerrit.named-data.net"
         self.auth = HTTPBasicAuthFromNetrc(self.url)
         self.rest = GerritRestAPI(url=self.url, auth=self.auth)
@@ -75,11 +85,39 @@ class TestNLSR(object):
                 time.sleep(30)
         return 0, test_name
 
+    def checkForTargetVersions(self, changeNum):
+        changeDetails = self.rest.get("/changes/{}/detail".format(changeNum))
+        owner = changeDetails['submitter']['username']
+        messageList = changeDetails['messages']
+        for comment in messageList:
+            if "~NDN-Robot" in comment['message'] and comment['author']['username'] == owner:
+                print("Arbitrary version request found...")
+                splitPairs = comment['message'].split("\n\n")
+                for pair in splitPairs:
+                    if "#" not in pair:
+                        tempArr = pair.split(":")
+                        for key in self.name_to_source:
+                            if tempArr[0] == key:
+                                targetChange = self.rest.get("/changes/?q={}&o=CURRENT_REVISION".format(tempArr[1]))[0]
+                                targetChangeId = targetChange["change_id"]
+                                targetRef = targetChange["revisions"][targetChange["current_revision"]]["ref"]
+                                try:
+                                    if self.name_to_source[key].install_target_change(self.url, targetChangeId, targetRef) != 0:
+                                        self.rev.set_message("NLSR Tester Bot: Unable to install target dependency {} version {}".format(key, targetChange))
+                                        self.rev.add_labels({'Verified-Integration': 0})
+                                        dependencyFail = True
+                                    else:
+                                        dependencyDict[key] = targetChange
+                                except Exception as e:
+                                    print(e)
+                                    sys.exit(1)
+                break
+
     def test_nlsr(self):
         """ Update and run NLSR test """
         self.message = ""
         if self.nlsr_src.install() != 0:
-            self.message = "Unable to compile NLSR"
+            self.message = "NLSR tester bot: Unable to compile NLSR"
             self.score = -1
             return 1
         code, test = self.run_tests()
@@ -107,8 +145,8 @@ class TestNLSR(object):
     def get_and_test_changes(self):
         """ Pull the changes testable patches """
         # Get open NLSR changes already verified by Jenkins and mergable and not verified by self
-        changes = self.rest.get("changes/?q=status:open+project:NLSR+branch:master+is:mergeable+label:verified+label:Verified-Integration=0")
-        #changes = self.rest.get("changes/?q=4549")
+        #changes = self.rest.get("changes/?q=status:open+project:NLSR+branch:master+is:mergeable+label:verified+label:Verified-Integration=0")
+        changes = self.rest.get("changes/?q=4549")
 
         print("changes", changes)
 
@@ -134,26 +172,32 @@ class TestNLSR(object):
                 self.rev.set_message("NLSR tester bot: Unable to compile dependencies!")
                 self.rev.add_labels({'Verified-Integration': 0})
             else:
-                print "Pulling NLSR patch to a new branch..."
-                self.nlsr_src.checkout_new_branch(change_id)
-                self.nlsr_src.pull_from_gerrit("{}/NLSR".format(self.url), ref)
-
-                # Check if there has been a change in cpp, hpp, or wscript files
-                if self.nlsr_src.has_code_changes():
-                    # Test the change
-                    print "Testing NLSR patch"
-                    self.test_nlsr()
-                    print "Commenting"
-                    self.rev.set_message(self.message)
-                    self.rev.add_labels({'Verified-Integration': self.score})
+                self.checkForTargetVersions(change_num)
+                if dependencyFail:
+                    print self.rev
+                    self.rest.review(change_id, patch, self.rev)
                 else:
-                    print "No change in code"
-                    self.rev.set_message("NLSR tester bot: No change in code, skipped testing!")
-                    self.rev.add_labels({'Verified-Integration': 1})
-                self.nlsr_src.clean_up(change_id)
+                    print "Pulling NLSR patch to a new branch..."
+                    self.nlsr_src.checkout_new_branch(change_id)
+                    self.nlsr_src.pull_from_gerrit("{}/NLSR".format(self.url), ref)
 
-            print self.rev
-            self.rest.review(change_id, patch, self.rev)
+                    # Check if there has been a change in cpp, hpp, or wscript files
+                    if self.nlsr_src.has_code_changes():
+                        # Test the change
+                        print "Testing NLSR patch"
+                        self.test_nlsr()
+                        print "Commenting"
+                        if(dependencyDict):
+                        self.rev.set_message(self.message)
+                        self.rev.add_labels({'Verified-Integration': self.score})
+                    else:
+                        print "No change in code"
+                        self.rev.set_message("NLSR tester bot: No change in code, skipped testing!")
+                        self.rev.add_labels({'Verified-Integration': 1})
+                    self.nlsr_src.clean_up(change_id)
+
+                print self.rev
+                self.rest.review(change_id, patch, self.rev)
 
             print "\n--------------------------------------------------------\n"
             time.sleep(60)
@@ -171,7 +215,7 @@ if __name__ == "__main__":
     print args.work_dir
 
     TEST = TestNLSR(args)
-
-    while 1:
-        TEST.get_and_test_changes()
-        time.sleep(600)
+    TEST.get_and_test_changes()
+    # while 1:
+    #     TEST.get_and_test_changes()
+    #     time.sleep(600)

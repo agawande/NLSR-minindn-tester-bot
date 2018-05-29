@@ -13,7 +13,7 @@ from requests.auth import HTTPBasicAuth
 
 from pygerrit2.rest import GerritRestAPI
 from pygerrit2.rest import GerritReview
-from pygerrit2.rest.auth import HTTPBasicAuthFromNetrc
+from pygerrit2.rest.auth import HTTPBasicAuthFromNetrc, HTTPDigestAuthFromNetrc
 
 class TestNLSR(object):
     """ Test NLSR class """
@@ -40,8 +40,8 @@ class TestNLSR(object):
         self.arbitraryVersionDict = {}
         self.dependencyFail = False
 
-        self.url = "https://gerrit.named-data.net"
-        self.auth = HTTPBasicAuthFromNetrc(self.url)
+        self.url = "http://gerrit.named-data.net"
+        self.auth = HTTPDigestAuthFromNetrc(self.url)
         self.rest = GerritRestAPI(url=self.url, auth=self.auth)
         self.rev = GerritReview()
         self.message = ""
@@ -101,7 +101,16 @@ class TestNLSR(object):
                         tempArr = pair.split(":")
                         for key in self.name_to_source:
                             if tempArr[0] == key:
-                                targetChange = self.rest.get("/changes/?q={}&o=CURRENT_REVISION".format(tempArr[1]))[0]
+                                changeReference = tempArr[1]
+                                # if "." in changeReference:
+                                #     #TODO: Add version number specification
+                                #     pass
+                                # elif len(changeReference) == 41:
+                                #     #TODO: Add changeId specification
+                                #     targetChangeId = changeReference
+                                #     changeIdInfo = self.rest.get("/changes/{}~master~{}/")
+                                #     changeReference = changeIdInfo["_number"]
+                                targetChange = self.rest.get("/changes/?q={}&o=CURRENT_REVISION".format(changeReference))[0]
                                 targetChangeId = targetChange["change_id"]
                                 targetRef = targetChange["revisions"][targetChange["current_revision"]]["ref"]
                                 try:
@@ -117,6 +126,7 @@ class TestNLSR(object):
                 break
 
     def test_nlsr(self):
+        return 0
         """ Update and run NLSR test """
         self.message = ""
         if self.nlsr_src.install() != 0:
@@ -138,6 +148,7 @@ class TestNLSR(object):
         return 0
 
     def update_dep(self):
+        return 0
         """ Update dependencies """
         git_source = [self.ndncxx_src, self.nfd_src, self.chronosync_src, self.nlsr_src, self.minindn_src]
         for source in git_source:
@@ -149,7 +160,7 @@ class TestNLSR(object):
         """ Pull the changes testable patches """
         # Get open NLSR changes already verified by Jenkins and mergable and not verified by self
         #changes = self.rest.get("changes/?q=status:open+project:NLSR+branch:master+is:mergeable+label:verified+label:Verified-Integration=0")
-        changes = self.rest.get("changes/?q=4763")
+        changes = self.rest.get("changes/?q=4763+project:NLSR")
 
         print("changes", changes)
 
@@ -160,7 +171,7 @@ class TestNLSR(object):
             print change_id
             change_num = change['_number']
 
-            current_rev = self.rest.get("/changes/?q={}&o=CURRENT_REVISION".format(change_num))
+            current_rev = self.rest.get("/changes/?q={}+project:NLSR&o=CURRENT_REVISION".format(change_num))
             #print current_rev
             tmp = current_rev[0]['revisions']
             for item in tmp:
@@ -176,10 +187,7 @@ class TestNLSR(object):
                 self.rev.add_labels({'Verified-Integration': 0})
             else:
                 self.checkForTargetVersions(change_num)
-                if self.dependencyFail:
-                    print self.rev
-                    self.rest.review(change_id, patch, self.rev)
-                else:
+                if not self.dependencyFail:
                     print "Pulling NLSR patch to a new branch..."
                     self.nlsr_src.checkout_new_branch(change_id)
                     self.nlsr_src.pull_from_gerrit("{}/NLSR".format(self.url), ref)
@@ -195,6 +203,7 @@ class TestNLSR(object):
                             for key in self.arbitraryVersionDict:
                                 messageAppend += " {}:{}".format(key, self.arbitraryVersionDict[key])
                             self.message += (" Tested with:" + messageAppend)
+                        print(self.message)
                         self.rev.set_message(self.message)
                         self.rev.add_labels({'Verified-Integration': self.score})
                     else:
@@ -202,12 +211,18 @@ class TestNLSR(object):
                         self.rev.set_message("NLSR tester bot: No change in code, skipped testing!")
                         self.rev.add_labels({'Verified-Integration': 1})
                     self.nlsr_src.clean_up(change_id)
-
+                
+                self.rev.set_message("IT WORKS FINALLY")
+                self.rev.add_labels({'Verified-Integration': 0})
+                
+                # self.auth = HTTPDigestAuthFromNetrc(self.url)
+                # self.rest = GerritRestAPI(url=self.url, auth=self.auth)
+                
                 print self.rev
                 self.rest.review(change_id, patch, self.rev)
 
             print "\n--------------------------------------------------------\n"
-            time.sleep(60)
+            #time.sleep(60)
 
 if __name__ == "__main__":
 

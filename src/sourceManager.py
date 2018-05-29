@@ -76,7 +76,4 @@ class SourceManager(object):
         return False
 
     def install_target_change(self, targetURL, changeId, ref):
-        self.checkout_new_branch(changeId)
-        self.pull_from_gerrit("{}/{}".format(targetURL, self.repoName), ref)
-        self.install()
-        self.clean_up(changeId)
+        return self.checkout_new_branch(changeId) and self.pull_from_gerrit("{}/{}".format(targetURL, self.repoName), ref) and self.install() and self.clean_up(changeId)

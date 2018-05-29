@@ -8,6 +8,7 @@ import argparse
 import json
 import shutil
 from sourceManager import SourceManager
+from logManager import LogManager
 
 from pygerrit2.rest import GerritRestAPI
 from pygerrit2.rest import GerritReview
@@ -21,6 +22,8 @@ class TestNLSR(object):
         self.nlsr_exp_file = os.path.abspath(options.nlsr_exp_file)
         self.work_dir = os.path.abspath(options.work_dir)
         self.exp_names = ""
+
+        self.exp_log = None
 
         self.ndncxx_src = SourceManager("{}/ndn-cxx".format(self.work_dir))
         self.nfd_src = SourceManager("{}/NFD".format(self.work_dir))
@@ -60,6 +63,7 @@ class TestNLSR(object):
                         self.exp_names += test_name + "\n\n"
                     proc = subprocess.Popen(exp[1].split())
                     proc.wait()
+                    self.exp_log.writeLogs(test_name)
                     self.clear_tmp()
                     subprocess.call("mn --clean".split())
 
@@ -141,6 +145,7 @@ class TestNLSR(object):
                 # Check if there has been a change in cpp, hpp, or wscript files
                 if self.nlsr_src.has_code_changes():
                     # Test the change
+                    self.exp_log = LogManager(change_num, "/home/zephyrmoth")
                     print "Testing NLSR patch"
                     self.test_nlsr()
                     print "Commenting"

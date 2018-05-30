@@ -9,6 +9,7 @@ import json
 import shutil
 from sourceManager import SourceManager
 from logManager import LogManager
+from logCleaner import LogCleaner
 
 from pygerrit2.rest import GerritRestAPI
 from pygerrit2.rest import GerritReview
@@ -21,6 +22,7 @@ class TestNLSR(object):
     def __init__(self, options):
         self.nlsr_exp_file = os.path.abspath(options.nlsr_exp_file)
         self.work_dir = os.path.abspath(options.work_dir)
+        self.log_dir = os.path.abspath(options.log_directory)
         self.exp_names = ""
 
         self.exp_log = None
@@ -30,7 +32,6 @@ class TestNLSR(object):
         self.chronosync_src = SourceManager("{}/Chronosync".format(self.work_dir))
         self.nlsr_src = SourceManager("{}/NLSR".format(self.work_dir))
         self.minindn_src = SourceManager("{}/mini-ndn".format(self.work_dir))
-
         self.url = "https://gerrit.named-data.net"
         self.auth = HTTPBasicAuthFromNetrc(self.url)
         self.rest = GerritRestAPI(url=self.url, auth=self.auth)
@@ -111,8 +112,8 @@ class TestNLSR(object):
     def get_and_test_changes(self):
         """ Pull the changes testable patches """
         # Get open NLSR changes already verified by Jenkins and mergable and not verified by self
-        changes = self.rest.get("changes/?q=status:open+project:NLSR+branch:master+is:mergeable+label:verified+label:Verified-Integration=0")
-        #changes = self.rest.get("changes/?q=4549")
+        #changes = self.rest.get("changes/?q=status:open+project:NLSR+branch:master+is:mergeable+label:verified+label:Verified-Integration=0")
+        changes = self.rest.get("changes/?q=4763")
 
         print("changes", changes)
 
@@ -145,7 +146,7 @@ class TestNLSR(object):
                 # Check if there has been a change in cpp, hpp, or wscript files
                 if self.nlsr_src.has_code_changes():
                     # Test the change
-                    self.exp_log = LogManager(change_num, "/home/zephyrmoth")
+                    self.exp_log = LogManager(change_num, self.log_dir)
                     print "Testing NLSR patch"
                     self.test_nlsr()
                     print "Commenting"
@@ -171,12 +172,20 @@ if __name__ == "__main__":
 
     parser.add_argument('work_dir', help='specify working dir other than /tmp')
 
+    parser.add_argument('log_directory', help='specify directory for storing logs')
+
     args = parser.parse_args()
     print args.nlsr_exp_file
     print args.work_dir
 
-    TEST = TestNLSR(args)
+    cleaning_counter = 0
+    cleaner = LogCleaner()
 
+    TEST = TestNLSR(args)
     while 1:
         TEST.get_and_test_changes()
         time.sleep(600)
+        cleaning_counter += 1
+        if cleaning_counter >= 145:
+            cleaner.clean_up(args.log_directory)
+            cleaning_counter == 0

@@ -17,10 +17,10 @@ class TestNLSR(object):
     """ Test NLSR class """
 
     # pylint: disable=too-many-instance-attributes
-    def __init__(self, options):
-        self.nlsr_exp_file = os.path.abspath(options.nlsr_exp_file)
-        self.work_dir = os.path.abspath(options.work_dir)
-        self.exp_names = ""
+    def __init__(self):
+        self.nlsr_exp_file = os.path.abspath("exp_file")
+        self.work_dir = os.path.abspath("work-dir")
+        self.exp_names = []
 
         self.ndncxx_src = SourceManager("{}/ndn-cxx".format(self.work_dir))
         self.nfd_src = SourceManager("{}/NFD".format(self.work_dir))
@@ -38,26 +38,29 @@ class TestNLSR(object):
         self.clear_tmp()
 
     def clear_tmp(self):
-        os.chdir("/tmp")
-        dir = [d for d in os.listdir('/tmp') if os.path.isdir(os.path.join('/tmp', d))]
+        os.chdir("/tmp/minindn")
+        dir = [d for d in os.listdir('/tmp/minindn') if os.path.isdir(os.path.join('/tmp/minindn', d))]
         for f in dir:
             if not f.startswith('.'):
                 shutil.rmtree(f)
 
     def run_tests(self):
-        self.exp_names = ""
+        self.exp_names = []
         with open(self.nlsr_exp_file) as test_file:
             for line in test_file:
+                if line[0] = "#":
+                    continue
+
                 exp = line.split(":")
                 test_name = exp[0]
 
-                # Run two times if test fails
+                # Run two more times if test fails
                 i = 0
                 while (i < 3):
                     print "Running minindn test {}".format(test_name)
                     print test_name
                     if i == 0:
-                        self.exp_names += test_name + "\n\n"
+                        self.exp_names.append(test_name)
                     proc = subprocess.Popen(exp[1].split())
                     proc.wait()
                     self.clear_tmp()
@@ -85,13 +88,14 @@ class TestNLSR(object):
         code, test = self.run_tests()
         if code != 0:
             print "Test {} failed!".format(test)
-            self.message = "NLSR tester bot: Test {} failed!".format(test)
+            self.message += '\n\n'.join(self.exp_names[:len(self.exp_names) - 1])
+            self.message += "\n\nNLSR tester bot: Test {} failed!".format(test)
             self.score = -1
             return 1
         else:
             print "All tests passed!"
             self.message = "NLSR tester bot: \n\nAll tests passed! \n\n"
-            self.message += self.exp_names
+            self.message += '\n\n'.join(self.exp_names)
             print self.message
             self.score = 1
         return 0
@@ -160,18 +164,8 @@ class TestNLSR(object):
 
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser(description='Mini-NDN NLSR tester for gerrit')
-
-    parser.add_argument('nlsr_exp_file', help='specify NLSR experiment file')
-
-    parser.add_argument('work_dir', help='specify working dir other than /tmp')
-
-    args = parser.parse_args()
-    print args.nlsr_exp_file
-    print args.work_dir
-
-    TEST = TestNLSR(args)
+    test = TestNLSR()
 
     while 1:
-        TEST.get_and_test_changes()
+        test.get_and_test_changes()
         time.sleep(600)

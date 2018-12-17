@@ -25,6 +25,7 @@ class TestNLSR(object):
         self.ndncxx_src = SourceManager("{}/ndn-cxx".format(self.work_dir))
         self.nfd_src = SourceManager("{}/NFD".format(self.work_dir))
         self.chronosync_src = SourceManager("{}/Chronosync".format(self.work_dir))
+        self.psync_src = SourceManager("{}/PSync".format(self.work_dir))
         self.nlsr_src = SourceManager("{}/NLSR".format(self.work_dir))
         self.minindn_src = SourceManager("{}/mini-ndn".format(self.work_dir))
 
@@ -48,7 +49,7 @@ class TestNLSR(object):
         self.exp_names = []
         with open(self.nlsr_exp_file) as test_file:
             for line in test_file:
-                if line[0] = "#":
+                if line[0] == "#":
                     continue
 
                 exp = line.split(":")
@@ -102,7 +103,8 @@ class TestNLSR(object):
 
     def update_dep(self):
         """ Update dependencies """
-        git_source = [self.ndncxx_src, self.nfd_src, self.chronosync_src, self.nlsr_src, self.minindn_src]
+        git_source = [self.ndncxx_src, self.nfd_src, self.chronosync_src, self.psync_src,
+                      self.nlsr_src, self.minindn_src]
         for source in git_source:
             if source.update_and_install() != 0:
                 return 1

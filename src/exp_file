@@ -1,4 +1,4 @@
-Standalone test:minindn /usr/local/etc/mini-ndn/standalone.conf --experiment convergence --ctime 30 --no-cli
+Standalone test:minindn /usr/local/etc/mini-ndn/standalone.conf --experiment=pingall --nPings=0 --ctime 30 --no-cli
 4 node convergence test:minindn --experiment=pingall --no-cli --nlsr-security --nPings=0
 Segmented LSA test:minindn --experiment=advertise-delayed-start --no-cli
 4 node mcn failure convergence test w/security:minindn --experiment=mcn-failure --no-cli  --nlsr-security

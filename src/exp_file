@@ -4,7 +4,7 @@ Segmented LSA test:minindn --experiment=advertise-delayed-start --no-cli
 4 node mcn failure convergence test w/security:minindn --experiment=mcn-failure --no-cli  --nlsr-security
 10 node HR convergence test w/o CS:minindn --experiment=pingall --nPings=0 --no-cli --routing hr /usr/local/etc/mini-ndn/minindn.ucla.conf --nlsr-security --ctime 150 --cs-size=0
 10 node mcn failure convergence test w/security:minindn --experiment=mcn-failure --no-cli /usr/local/etc/mini-ndn/minindn.ucla.conf --nlsr-security
-10 node dry run convergence test:minindn --experiment=pingall --no-cli --no-cli --routing dry /usr/local/etc/mini-ndn/minindn.ucla.conf --nlsr-security --ctime 90
+10 node dry run convergence test:minindn --experiment=pingall --nPings=0 --no-cli --no-cli --routing dry /usr/local/etc/mini-ndn/minindn.ucla.conf --nlsr-security --ctime 90
 10 node HR nlsrc test:minindn --experiment=prefix-propogation --no-cli --routing hr /usr/local/etc/mini-ndn/minindn.ucla.conf --nlsr-security --ctime 90
 42 node mcn (1 hour) failure convergence test:minindn --experiment=mcn-failure --nPings=0 --no-cli /usr/local/etc/mini-ndn/current-testbed.conf --nlsr-security --ctime 3600
 42 node mcn (1 hour) HR failure convergence test:minindn --experiment=mcn-failure --nPings=0 --routing=hr --no-cli /usr/local/etc/mini-ndn/current-testbed.conf --nlsr-security --ctime 3600
